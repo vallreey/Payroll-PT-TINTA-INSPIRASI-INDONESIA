@@ -1,1 +1,1 @@
-//
+import Alpine from 'alpinejs'
