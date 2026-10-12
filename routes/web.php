@@ -3,9 +3,10 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredEmployeeController;
+use App\Http\Controllers\DashboardController;
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect()->route('login');
 });
 // ---------- Guest routes (belum login) ----------
 Route::middleware('guest')->group(function () {
@@ -32,9 +33,8 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
-    // Placeholder dashboard — nanti diarahkan sesuai role (Karyawan/HRD/Supervisor/dst)
-    Route::get('/dashboard', function () {
-        return 'Selamat datang, ' . auth()->user()->name . ' (role: ' . auth()->user()->role . ')';
-    })->name('dashboard');
+    // Dashboard — tampilan menyesuaikan role (lihat DashboardController)
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 });
+
 

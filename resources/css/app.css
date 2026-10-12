@@ -1,1 +1,11 @@
 @import 'tailwindcss';
+
+@theme {
+    --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+    --shadow-card: 0 4px 16px rgb(15 23 42 / 0.08);
+}
+
+/* Alpine: sembunyikan elemen x-cloak sampai Alpine selesai inisialisasi */
+[x-cloak] {
+    display: none !important;
+}
