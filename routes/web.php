@@ -35,6 +35,9 @@ Route::middleware('auth')->group(function () {
 
     // Dashboard — tampilan menyesuaikan role (lihat DashboardController)
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    // Absensi — versi dummy untuk UI sesuai mockup
+    Route::get('/attendance', [\App\Http\Controllers\AttendanceController::class, 'index'])->name('attendance.index');
 });
 
 

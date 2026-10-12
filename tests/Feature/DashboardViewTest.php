@@ -25,4 +25,20 @@ class DashboardViewTest extends TestCase
         $response->assertSee('Announcement');
         $response->assertSee('Schedule');
     }
+
+    public function test_attendance_page_renders_dummy_data(): void
+    {
+        $user = User::factory()->create([
+            'name' => 'Surya Bintang',
+            'role' => 'hrd',
+            'status' => 'approved',
+        ]);
+
+        $response = $this->actingAs($user)->get('/attendance');
+
+        $response->assertOk();
+        $response->assertSee('Absensi');
+        $response->assertSee('Persetujuan Absensi');
+        $response->assertSee('Ageng Saputro');
+    }
 }
