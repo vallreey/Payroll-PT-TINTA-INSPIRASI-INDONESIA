@@ -1,0 +1,34 @@
+@props(['name', 'size' => 'size-5'])
+@php
+    $icons = [
+        'dashboard'  => '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+        'attendance' => '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+        'employees'  => '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="2.5"/><path d="M17 14c2.6 0 4.5 1.8 4.5 4.5"/>',
+        'payroll'    => '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9.5v.01M18 14.5v.01"/>',
+        'leave'      => '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>',
+        'tracking'   => '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>',
+        'reports'    => '<path d="M5 20V10M12 20V4M19 20v-7"/>',
+        'users'      => '<path d="M12 3l7 3v5.5c0 4.3-2.9 7.7-7 9.5-4.1-1.8-7-5.2-7-9.5V6z"/><path d="M9 12l2 2 4-4"/>',
+        'settings'   => '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
+        'search'     => '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/>',
+        'filter'     => '<path d="M4 6h16M7 12h10M10 18h4"/>',
+        'logout'     => '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M15 8l4 4-4 4M19 12H9"/>',
+        'menu'       => '<path d="M4 6h16M4 12h16M4 18h16"/>',
+        'plus'       => '<path d="M12 5v14M5 12h14"/>',
+        'arrow-up'   => '<path d="M12 19V5M6 11l6-6 6 6"/>',
+        'megaphone'  => '<path d="M4 10v4h3l7 4V6L7 10H4z"/><path d="M18 9a4 4 0 0 1 0 6"/>',
+        'calendar'   => '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>',
+        'bell'       => '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
+        'panel'      => '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M13 10l2 2-2 2"/>',
+        'external'   => '<path d="M7 17L17 7M9 7h8v8"/>',
+        'play'       => '<path d="M8 6l10 6-10 6z" fill="currentColor"/>',
+        'arrow-right'=> '<path d="M5 12h14M13 6l6 6-6 6"/>',
+        'chevron-down'=> '<path d="M6 9l6 6 6-6"/>',
+        'video'      => '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>',
+        'code'       => '<path d="M9 8l-4 4 4 4M15 8l4 4-4 4M13 6l-2 12"/>',
+        'documents'  => '<rect x="6" y="3" width="12" height="17" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>',
+        'org'        => '<rect x="9" y="3" width="6" height="4" rx="1"/><rect x="3" y="17" width="6" height="4" rx="1"/><rect x="15" y="17" width="6" height="4" rx="1"/><path d="M12 7v5M6 17v-5h12v5"/>',
+        'check'      => '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    ];
+@endphp
+<svg {{ $attributes->class([$size, 'shrink-0']) }} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{!! $icons[$name] ?? '' !!}</svg>
