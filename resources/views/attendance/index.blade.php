@@ -15,7 +15,7 @@
                 </button>
             </div>
 
-            <div class="mt-4 grid overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc] lg:grid-cols-3">
+            <div class="mt-4 grid overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc] md:grid-cols-3">
                 <div class="px-4 py-4 text-center sm:px-5">
                     <div class="text-[0.9rem] font-semibold text-slate-700">Present</div>
                     <div class="mt-4 grid grid-cols-3 gap-3">
@@ -34,7 +34,7 @@
                     </div>
                 </div>
 
-                <div class="border-t border-slate-200 px-4 py-4 text-center sm:px-5 lg:border-l lg:border-t-0">
+                <div class="border-t border-slate-200 px-4 py-4 text-center sm:px-5 md:border-l md:border-t-0">
                     <div class="text-[0.9rem] font-semibold text-slate-700">Absent</div>
                     <div class="mt-4 grid grid-cols-3 gap-3">
                         <div>
@@ -52,7 +52,7 @@
                     </div>
                 </div>
 
-                <div class="border-t border-slate-200 px-4 py-4 text-center sm:px-5 lg:border-l lg:border-t-0">
+                <div class="border-t border-slate-200 px-4 py-4 text-center sm:px-5 md:border-l md:border-t-0">
                     <div class="text-[0.9rem] font-semibold text-slate-700">Away</div>
                     <div class="mt-4 grid grid-cols-2 gap-3">
                         <div>
@@ -70,55 +70,56 @@
 
         <section class="rounded-[18px] border border-slate-200 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.03)] sm:p-5">
             <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <h2 class="text-[1.05rem] font-semibold text-slate-800">Persetujuan Absensi</h2>
+                <h2 class="shrink-0 text-[1.05rem] font-semibold text-[#183153] xl:whitespace-nowrap">Persetujuan Absensi</h2>
 
-                <div class="flex flex-wrap items-center justify-end gap-2">
-                    <div class="flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
+                <div class="flex flex-wrap items-center justify-end gap-2 xl:flex-nowrap">
+                    <div class="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#dce5f0] bg-[#f8fafc] px-3 text-xs font-medium text-[#8193ad]">
+                        <x-icon name="filter" size="size-4" />
                         1/3
                     </div>
 
-                    <form method="GET" action="{{ route('attendance.index') }}" class="flex flex-wrap items-center gap-2">
+                    <form method="GET" action="{{ route('attendance.index') }}" class="flex flex-wrap items-center gap-2 xl:flex-nowrap">
                         <div class="relative">
                             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
                                 <x-icon name="search" size="size-4" />
                             </span>
-                            <input type="search" name="search" value="{{ $search }}" placeholder="Search" class="w-36 rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                            <input type="search" name="search" value="{{ $search }}" placeholder="Search" class="h-10 w-36 rounded-xl border border-[#dce5f0] bg-[#f8fafc] pl-9 pr-3 text-sm text-[#183153] placeholder:text-[#8a9bb5] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                         </div>
 
                         <div class="relative">
-                            <input type="date" name="date" value="{{ $date }}" class="w-[11.5rem] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 pr-9 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
+                            <input type="date" name="date" value="{{ $date }}" class="h-10 w-[11.5rem] rounded-xl border border-[#dce5f0] bg-[#f8fafc] px-3 pr-9 text-sm text-[#183153] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
                             <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
                                 <x-icon name="calendar" size="size-4" />
                             </span>
                         </div>
 
                         <div class="relative">
-                            <select name="division" class="w-[8.5rem] appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 pr-9 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                            <select name="division" class="h-10 w-[8.5rem] appearance-none rounded-xl border border-[#dce5f0] bg-[#f8fafc] px-3 pr-9 text-sm text-[#183153] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
                                 @foreach ($divisions as $key => $label)
                                     <option value="{{ $key }}" @selected($division === $key)>{{ $label }}</option>
                                 @endforeach
                             </select>
                             <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                                <x-icon name="chevron-down" size="size-4" />
+                                <x-icon name="chevron-down" size="size-4" class="text-[#8a9bb5]" />
                             </span>
                         </div>
 
                         <div class="relative">
-                            <select name="status" class="w-[8.5rem] appearance-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 pr-9 text-sm text-slate-700 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
+                            <select name="status" class="h-10 w-[8.5rem] appearance-none rounded-xl border border-[#dce5f0] bg-[#f8fafc] px-3 pr-9 text-sm text-[#183153] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
                                 @foreach ($statuses as $key => $label)
                                     <option value="{{ $key }}" @selected($status === $key)>{{ $label }}</option>
                                 @endforeach
                             </select>
                             <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                                <x-icon name="chevron-down" size="size-4" />
+                                <x-icon name="chevron-down" size="size-4" class="text-[#8a9bb5]" />
                             </span>
                         </div>
 
-                        <button type="submit" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50">Filter</button>
+                        <button type="submit" class="h-10 rounded-xl border border-[#dce5f0] bg-white px-4 text-sm font-medium text-[#183153] shadow-sm transition hover:bg-slate-50">Filter</button>
                     </form>
 
                     <div class="flex items-center gap-2">
-                        <button type="button" class="inline-flex items-center gap-2 rounded-xl border border-[#d8eadc] bg-[#edf9ee] px-3 py-2 text-sm font-medium text-[#1a8e52] transition hover:bg-[#e5f6ea]">
+                        <button type="button" class="h-10 inline-flex items-center gap-2 rounded-xl border border-[#d5ead9] bg-[#edf8ef] px-4 text-sm font-medium text-[#159447] transition hover:bg-[#e5f4e8]">
                             <x-icon name="plus" size="size-4" />
                             Export
                         </button>
@@ -130,7 +131,7 @@
                 <div class="overflow-x-auto">
                     <table class="min-w-full border-collapse text-left text-sm text-slate-700">
                         <thead>
-                            <tr class="bg-[#f3f4f6] text-slate-700">
+                            <tr class="bg-[#f0f2f5] text-[#27364a]">
                                 <th class="px-4 py-3 text-[0.8rem] font-semibold">Employee Name</th>
                                 <th class="px-4 py-3 text-[0.8rem] font-semibold">Divisi</th>
                                 <th class="px-4 py-3 text-[0.8rem] font-semibold">Check-in</th>
