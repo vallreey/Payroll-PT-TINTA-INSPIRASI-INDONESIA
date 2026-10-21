@@ -11,6 +11,7 @@ class LeaveType extends Model
 
     protected $fillable = [
         'name',
+        'category',
         'default_quota',
         'requires_attachment',
     ];

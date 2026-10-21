@@ -14,12 +14,14 @@ class LeaveRequest extends Model
         'leave_type_id',
         'start_date',
         'end_date',
+        'total_days',
         'reason',
         'attachment_path',
         'status',
         'approved_by',
         'approved_at',
         'rejection_reason',
+        'approval_note',
     ];
 
     protected function casts(): array
@@ -27,6 +29,7 @@ class LeaveRequest extends Model
         return [
             'start_date' => 'date',
             'end_date' => 'date',
+            'total_days' => 'integer',
             'approved_at' => 'datetime',
         ];
     }

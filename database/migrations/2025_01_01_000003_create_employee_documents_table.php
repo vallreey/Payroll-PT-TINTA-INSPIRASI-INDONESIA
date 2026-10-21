@@ -4,6 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// Penyimpanan dokumen digital karyawan (SRS 3.2 Sistem Manajemen Data Karyawan; SDD dokumen_ktp)
 return new class extends Migration
 {
     public function up(): void

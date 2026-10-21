@@ -14,6 +14,7 @@ class LocationTracking extends Model
         'latitude',
         'longitude',
         'recorded_at',
+        'note',
     ];
 
     protected function casts(): array

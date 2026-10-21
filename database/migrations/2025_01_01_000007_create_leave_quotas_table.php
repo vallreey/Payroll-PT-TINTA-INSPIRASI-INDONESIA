@@ -4,6 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+// Pengganti kolom SDD karyawan.sisa_cuti: kuota per karyawan, per jenis cuti, per tahun. Sisa = quota - used.
 return new class extends Migration
 {
     public function up(): void
