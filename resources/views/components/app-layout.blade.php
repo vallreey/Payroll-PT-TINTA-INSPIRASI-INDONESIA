@@ -117,12 +117,12 @@
                 <div class="relative" x-data="{ menu: false }" @keydown.escape="menu = false" @click.outside="menu = false">
                     <button type="button" @click="menu = !menu" :aria-expanded="menu.toString()" aria-haspopup="true" aria-label="Menu akun"
                             class="block rounded-full border border-blue-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
-                        <x-avatar :name="$user->name" :photo="$userPhoto" size="size-10" />
+                        <x-avatar :name="$user->nama_tampil" :photo="$userPhoto" size="size-10" />
                     </button>
                     <div x-cloak x-show="menu" x-transition
                          class="absolute right-0 z-20 mt-2 w-56 rounded-xl bg-white p-2 shadow-lg ring-1 ring-gray-100">
                         <div class="px-3 py-2">
-                            <p class="truncate text-sm font-medium text-gray-900">{{ $user->name }}</p>
+                            <p class="truncate text-sm font-medium text-gray-900">{{ $user->nama_tampil }}</p>
                             <p class="text-xs text-gray-500">{{ $roleLabels[$user->role] ?? $user->role }}</p>
                         </div>
                         <form method="POST" action="{{ route('logout') }}" class="border-t border-gray-100 pt-1">

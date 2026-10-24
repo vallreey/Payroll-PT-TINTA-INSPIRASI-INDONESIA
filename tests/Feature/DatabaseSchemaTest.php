@@ -4,44 +4,48 @@ namespace Tests\Feature;
 
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\Notifikasi;
+use App\Models\Payroll;
 use App\Models\User;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
  * Menjaga agar skema database tetap sesuai SDD/SRS (lihat docs/DATABASE.md).
- * Jika test ini gagal setelah mengubah migrasi, berarti ada kolom/aturan SDD yang hilang.
+ * Jika test ini gagal setelah mengubah migrasi, berarti ada tabel/kolom SDD yang hilang.
  */
 class DatabaseSchemaTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_tables_and_columns_from_sdd_exist(): void
+    public function test_sdd_tables_and_columns_exist(): void
     {
         $expected = [
-            'users' => ['name', 'username', 'email', 'password', 'role', 'status', 'is_active', 'profile_photo_path', 'approved_by', 'approved_at'],
-            'departments' => ['name', 'description'],
-            'employees' => ['user_id', 'department_id', 'supervisor_id', 'nik', 'position', 'phone', 'address', 'join_date', 'base_salary', 'is_active'],
-            'employee_documents' => ['employee_id', 'document_type', 'file_path'],
-            'attendances' => ['employee_id', 'work_date', 'presence', 'check_in_at', 'check_out_at', 'photo_path', 'check_out_photo_path',
-                'latitude', 'longitude', 'check_out_latitude', 'check_out_longitude', 'status', 'notes'],
-            'location_trackings' => ['employee_id', 'latitude', 'longitude', 'recorded_at', 'note'],
-            'leave_types' => ['name', 'category', 'default_quota', 'requires_attachment'],
-            'leave_quotas' => ['employee_id', 'leave_type_id', 'year', 'quota', 'used'],
-            'leave_requests' => ['employee_id', 'leave_type_id', 'start_date', 'end_date', 'total_days', 'reason', 'attachment_path',
-                'status', 'approved_by', 'approval_note', 'rejection_reason'],
-            'payroll_periods' => ['name', 'start_date', 'end_date'],
-            'payrolls' => ['employee_id', 'payroll_period_id', 'basic_salary', 'allowance', 'attendance_deduction', 'pph21_deduction',
-                'bpjs_deduction', 'bpjs_tk_deduction', 'bpjs_kes_deduction', 'other_deduction', 'gross_salary', 'net_salary', 'status', 'paid_at'],
-            'notifications' => ['id', 'type', 'notifiable_type', 'notifiable_id', 'data', 'read_at'],
+            'tbl_pengguna' => ['id_pengguna', 'username', 'email', 'password', 'role', 'status', 'status_persetujuan', 'foto_profil', 'approved_by', 'approved_at', 'created_at', 'updated_at'],
+            'tbl_karyawan' => ['id_karyawan', 'id_pengguna', 'id_departemen', 'id_atasan', 'nik', 'nama_lengkap', 'jabatan', 'tanggal_masuk',
+                'no_telepon', 'alamat', 'gaji_pokok', 'sisa_cuti', 'status', 'dokumen_ktp', 'created_at'],
+            'tbl_departemen' => ['id_departemen', 'nama_departemen', 'deskripsi', 'created_at'],
+            'tbl_absensi' => ['id_absensi', 'id_karyawan', 'tanggal', 'jam_masuk', 'jam_keluar', 'foto_masuk', 'foto_keluar',
+                'lat_masuk', 'long_masuk', 'lat_keluar', 'long_keluar', 'status', 'status_persetujuan', 'keterangan'],
+            'tbl_izin_cuti' => ['id_izin', 'id_karyawan', 'jenis', 'tanggal_mulai', 'tanggal_selesai', 'total_hari', 'alasan', 'dokumen',
+                'status', 'approved_by', 'catatan_approval', 'created_at', 'updated_at'],
+            'tbl_penggajian' => ['id_penggajian', 'id_karyawan', 'bulan', 'tahun', 'gaji_pokok', 'tunjangan', 'potongan_absensi',
+                'pph21', 'bpjs_tk', 'bpjs_kes', 'gaji_bersih', 'status', 'tanggal_bayar', 'created_at'],
+            'tbl_tracking_lokasi' => ['id_tracking', 'id_karyawan', 'tanggal', 'waktu', 'latitude', 'longitude', 'keterangan', 'created_at'],
+            'tbl_notifikasi' => ['id_notifikasi', 'id_pengguna', 'judul', 'pesan', 'tipe', 'is_read', 'created_at'],
+            'tbl_dokumen_karyawan' => ['id_dokumen', 'id_karyawan', 'jenis_dokumen', 'path_file'],
         ];
 
         foreach ($expected as $table => $columns) {
             $this->assertTrue(Schema::hasTable($table), "Tabel {$table} tidak ada");
             $this->assertTrue(Schema::hasColumns($table, $columns), "Tabel {$table} kehilangan kolom SDD");
+        }
+
+        // Tabel nama lama tidak boleh tersisa
+        foreach (['users', 'employees', 'attendances', 'leave_requests', 'payrolls', 'departments', 'notifications'] as $old) {
+            $this->assertFalse(Schema::hasTable($old), "Tabel lama {$old} masih ada");
         }
     }
 
@@ -50,68 +54,100 @@ class DatabaseSchemaTest extends TestCase
         $employee = $this->makeEmployee('1');
 
         $row = [
-            'employee_id' => $employee->id,
-            'photo_path' => 'a.jpg', 'latitude' => -7.4, 'longitude' => 109.2,
-            'check_in_at' => '2026-06-21 08:55:00',
+            'id_karyawan' => $employee->id_karyawan,
+            'tanggal' => '2026-06-21',
+            'jam_masuk' => '08:55:00',
+            'foto_masuk' => 'a.jpg', 'lat_masuk' => -7.4, 'long_masuk' => 109.2,
         ];
 
         $first = Attendance::create($row);
-        $this->assertSame('2026-06-21', $first->work_date, 'work_date harus terisi otomatis dari check_in_at');
-        $this->assertSame('hadir', $first->fresh()->presence);
+        $this->assertSame('2026-06-21', $first->tanggal);
+        $this->assertSame('hadir', $first->fresh()->status);
+        $this->assertSame('pending', $first->fresh()->status_persetujuan);
 
         $this->expectException(UniqueConstraintViolationException::class);
-        Attendance::create($row + ['check_out_at' => null]);
+        Attendance::create($row);
     }
 
     public function test_same_employee_can_attend_on_different_days(): void
     {
         $employee = $this->makeEmployee('2');
 
-        foreach (['2026-06-21 08:55:00', '2026-06-22 08:50:00'] as $at) {
-            Attendance::create(['employee_id' => $employee->id, 'photo_path' => 'a.jpg', 'latitude' => 1, 'longitude' => 1, 'check_in_at' => $at]);
+        foreach (['2026-06-21', '2026-06-22'] as $tanggal) {
+            Attendance::create(['id_karyawan' => $employee->id_karyawan, 'tanggal' => $tanggal, 'jam_masuk' => '08:50:00',
+                'foto_masuk' => 'a.jpg', 'lat_masuk' => 1, 'long_masuk' => 1]);
         }
 
         $this->assertSame(2, Attendance::count());
     }
 
+    public function test_user_defaults_follow_sdd_and_registration_flow(): void
+    {
+        $user = User::factory()->create(['username' => 'budi']);
+        $user = $user->fresh();
+
+        $this->assertSame('aktif', $user->status);
+        $this->assertSame('pending', $user->status_persetujuan);
+        $this->assertSame('karyawan', $user->role);
+        $this->assertTrue($user->isActive());
+        $this->assertFalse($user->isApproved());
+    }
+
     public function test_username_must_be_unique_but_may_be_empty(): void
     {
         User::factory()->create(['username' => 'budi']);
-        User::factory()->count(2)->create(); // username null boleh lebih dari satu
+        User::factory()->count(2)->create(['username' => null]); // username null boleh lebih dari satu
 
         $this->expectException(UniqueConstraintViolationException::class);
         User::factory()->create(['username' => 'budi']);
     }
 
-    public function test_laravel_database_notifications_work_with_the_table(): void
+    public function test_display_name_comes_from_employee_or_falls_back_to_username(): void
+    {
+        $employee = $this->makeEmployee('3', 'Adhi Puspito');
+        $this->assertSame('Adhi Puspito', $employee->user->fresh()->nama_tampil);
+
+        $admin = User::factory()->create(['username' => 'superadmin', 'role' => 'super_admin']);
+        $this->assertSame('superadmin', $admin->nama_tampil);
+    }
+
+    public function test_payroll_is_unique_per_employee_per_month_and_net_is_calculated(): void
+    {
+        $employee = $this->makeEmployee('4');
+
+        $payroll = new Payroll([
+            'id_karyawan' => $employee->id_karyawan, 'bulan' => 6, 'tahun' => 2026,
+            'gaji_pokok' => 5000000, 'tunjangan' => 500000, 'potongan_absensi' => 100000,
+            'pph21' => 50000, 'bpjs_tk' => 100000, 'bpjs_kes' => 50000,
+        ]);
+        $payroll->recalculate();
+        $payroll->save();
+
+        $this->assertEquals(5200000.00, $payroll->fresh()->gaji_bersih);
+        $this->assertSame('draft', $payroll->fresh()->status);
+
+        $this->expectException(UniqueConstraintViolationException::class);
+        Payroll::create(['id_karyawan' => $employee->id_karyawan, 'bulan' => 6, 'tahun' => 2026]);
+    }
+
+    public function test_notifications_table_matches_sdd(): void
     {
         $user = User::factory()->create();
-        $user->notify(new SchemaTestNotification());
 
-        $this->assertSame(1, $user->unreadNotifications()->count());
+        Notifikasi::create(['id_pengguna' => $user->id_pengguna, 'judul' => 'Pengajuan izin baru', 'pesan' => 'Ada pengajuan izin.', 'tipe' => 'izin']);
 
-        $notification = $user->unreadNotifications()->first();
-        $this->assertSame('izin', $notification->data['tipe']);
+        $this->assertSame(1, $user->notifikasi()->belumDibaca()->count());
 
-        $notification->markAsRead();
-        $this->assertSame(0, $user->unreadNotifications()->count());
+        $user->notifikasi()->first()->update(['is_read' => true]);
+        $this->assertSame(0, $user->notifikasi()->belumDibaca()->count());
     }
 
-    private function makeEmployee(string $nik): Employee
+    private function makeEmployee(string $nik, string $nama = 'Karyawan Uji'): Employee
     {
-        return Employee::create(['user_id' => User::factory()->create()->id, 'nik' => $nik]);
-    }
-}
-
-class SchemaTestNotification extends Notification
-{
-    public function via(object $notifiable): array
-    {
-        return ['database'];
-    }
-
-    public function toArray(object $notifiable): array
-    {
-        return ['judul' => 'Pengajuan izin baru', 'pesan' => 'Ada pengajuan izin.', 'tipe' => 'izin'];
+        return Employee::create([
+            'id_pengguna' => User::factory()->create()->id_pengguna,
+            'nik' => $nik,
+            'nama_lengkap' => $nama,
+        ]);
     }
 }

@@ -43,17 +43,16 @@ class DashboardController extends Controller
     {
         $now = CarbonImmutable::now();
         $dayStart = $now->startOfDay();
-        $dayEnd = $now->endOfDay();
         $cutoff = $dayStart->setTimeFromTimeString((string) config('attendance.work_start', '09:00'));
 
-        $scopes = $this->statusScopes($dayStart, $dayEnd, $cutoff);
+        $scopes = $this->statusScopes($dayStart, $cutoff);
         $scope = $this->scopedEmployees($user);
 
         // ---- Kartu statistik ----
         $quarterStart = $now->startOfQuarter();
 
         $totalEmployees = (clone $scope)->count();
-        $newEmployees = (clone $scope)->where('employees.created_at', '>=', $quarterStart)->count();
+        $newEmployees = (clone $scope)->where('tbl_karyawan.created_at', '>=', $quarterStart)->count();
 
         $totalServices = Service::query()->count();
         $newServices = Service::query()->where('created_at', '>=', $quarterStart)->count();
@@ -83,39 +82,41 @@ class DashboardController extends Controller
 
         // ---- 6 aktivitas check-in terbaru hari ini (daftar lengkap ada di halaman Absensi) ----
         $firstCheckIn = Attendance::query()
-            ->select('check_in_at')
-            ->whereColumn('attendances.employee_id', 'employees.id');
+            ->select('jam_masuk')
+            ->whereColumn('tbl_absensi.id_karyawan', 'tbl_karyawan.id_karyawan');
         $scopes['present']($firstCheckIn);
-        $firstCheckIn->orderBy('check_in_at')->limit(1);
+        $firstCheckIn->orderBy('jam_masuk')->limit(1);
 
         $employees = (clone $scope)
-            ->select('employees.*')
+            ->select('tbl_karyawan.*')
             ->addSelect(['first_check_in' => $firstCheckIn])
-            ->with(['user:id,name', 'department:id,name'])
+            ->with(['user:id_pengguna,username,foto_profil', 'department:id_departemen,nama_departemen'])
             ->orderByRaw('first_check_in IS NULL')
             ->orderByDesc('first_check_in')
-            ->orderBy('employees.id')
+            ->orderBy('tbl_karyawan.id_karyawan')
             ->limit(self::ROWS)
             ->get();
 
         $leaveIds = LeaveRequest::query()
             ->where('status', 'approved')
-            ->whereDate('start_date', '<=', $dayStart->toDateString())
-            ->whereDate('end_date', '>=', $dayStart->toDateString())
-            ->whereIn('employee_id', $employees->pluck('id')->all())
-            ->pluck('employee_id')
+            ->whereDate('tanggal_mulai', '<=', $dayStart->toDateString())
+            ->whereDate('tanggal_selesai', '>=', $dayStart->toDateString())
+            ->whereIn('id_karyawan', $employees->pluck('id_karyawan')->all())
+            ->pluck('id_karyawan')
             ->flip();
 
-        $rows = $employees->map(function (Employee $employee) use ($cutoff, $leaveIds) {
-            $firstIn = $employee->first_check_in ? CarbonImmutable::parse($employee->first_check_in) : null;
+        $cutoffTime = $cutoff->format('H:i:s');
+
+        $rows = $employees->map(function (Employee $employee) use ($cutoffTime, $leaveIds) {
+            $firstIn = $employee->first_check_in; // TIME 'HH:MM:SS' atau null
 
             return [
-                'name' => $employee->user?->name ?? '-',
+                'name' => $employee->nama_lengkap,
                 'photo' => $employee->photo_url,
                 'status' => $firstIn
-                    ? ($firstIn->lessThanOrEqualTo($cutoff) ? 'on_time' : 'late')
-                    : ($leaveIds->has($employee->id) ? 'leave' : 'absent'),
-                'check_in' => $firstIn?->format('H.i'),
+                    ? ($firstIn <= $cutoffTime ? 'on_time' : 'late')
+                    : ($leaveIds->has($employee->id_karyawan) ? 'leave' : 'absent'),
+                'check_in' => $firstIn ? CarbonImmutable::parse($firstIn)->format('H.i') : null,
             ];
         });
 
@@ -125,53 +126,53 @@ class DashboardController extends Controller
         $period = in_array($period, ['week', 'month'], true) ? $period : null;
 
         $announcementQuery = Announcement::query()
-            ->whereNotNull('published_at')
-            ->where('published_at', '<=', $now);
+            ->whereNotNull('tanggal_terbit')
+            ->where('tanggal_terbit', '<=', $now);
 
         if ($search !== '') {
             $like = '%'.addcslashes($search, '%_\\').'%';
-            $announcementQuery->where(fn (Builder $q) => $q->where('title', 'like', $like)->orWhere('body', 'like', $like));
+            $announcementQuery->where(fn (Builder $q) => $q->where('judul', 'like', $like)->orWhere('isi', 'like', $like));
         }
         if ($period === 'week') {
-            $announcementQuery->where('published_at', '>=', $now->startOfWeek());
+            $announcementQuery->where('tanggal_terbit', '>=', $now->startOfWeek());
         } elseif ($period === 'month') {
-            $announcementQuery->where('published_at', '>=', $now->startOfMonth());
+            $announcementQuery->where('tanggal_terbit', '>=', $now->startOfMonth());
         }
 
-        $announcements = $announcementQuery->latest('published_at')->limit(10)->get();
+        $announcements = $announcementQuery->latest('tanggal_terbit')->limit(10)->get();
 
         // ---- Submission: pengajuan izin/cuti pending ----
         $pendingQuery = LeaveRequest::query()
             ->pending()
-            ->whereIn('employee_id', (clone $scope)->select('employees.id'));
+            ->whereIn('id_karyawan', (clone $scope)->select('tbl_karyawan.id_karyawan'));
         $pendingTotal = (clone $pendingQuery)->count();
         $submissions = $pendingQuery
-            ->with(['employee.user:id,name', 'leaveType:id,name'])
+            ->with('employee:id_karyawan,nama_lengkap')
             ->latest()
             ->limit(5)
             ->get();
 
         // ---- Task milik user yang login ----
         $tasks = Task::query()
-            ->where('employee_id', $user->employee?->id ?? 0)
-            ->where('status', 'open')
-            ->orderBy('due_date')
+            ->where('id_karyawan', $user->employee?->id_karyawan ?? 0)
+            ->where('status', 'terbuka')
+            ->orderBy('tenggat')
             ->limit(10)
             ->get();
 
         // ---- Schedule mendatang ----
         // Super Admin / HRD / Direktur melihat semua; role lain hanya yang dibuat atau diikutinya.
-        $scheduleQuery = Schedule::query()->where('start_at', '>=', $dayStart);
+        $scheduleQuery = Schedule::query()->where('waktu_mulai', '>=', $dayStart);
         if (! ($user->isSuperAdmin() || $user->isHrd() || $user->isDirektur())) {
-            $employeeId = $user->employee?->id ?? 0;
+            $employeeId = $user->employee?->id_karyawan ?? 0;
             $scheduleQuery->where(fn (Builder $q) => $q
-                ->where('created_by', $user->id)
-                ->orWhereHas('attendees', fn (Builder $a) => $a->where('employees.id', $employeeId)));
+                ->where('dibuat_oleh', $user->id_pengguna)
+                ->orWhereHas('attendees', fn (Builder $a) => $a->where('tbl_karyawan.id_karyawan', $employeeId)));
         }
         $scheduleTotal = (clone $scheduleQuery)->count();
         $schedules = $scheduleQuery
-            ->with('attendees.user:id,name')
-            ->orderBy('start_at')
+            ->with('attendees.user:id_pengguna,username,foto_profil')
+            ->orderBy('waktu_mulai')
             ->limit(6)
             ->get();
 
@@ -196,22 +197,23 @@ class DashboardController extends Controller
     }
 
     // =====================================================================
-    // Dashboard Karyawan (tidak melihat data karyawan lain)
+    // Dashboard Karyawan
     // =====================================================================
 
     private function employeeDashboard(User $user): View
     {
         $now = CarbonImmutable::now();
         $employee = $user->employee;
-        $cutoff = $now->startOfDay()->setTimeFromTimeString((string) config('attendance.work_start', '09:00'));
+        $cutoffTime = $now->startOfDay()
+            ->setTimeFromTimeString((string) config('attendance.work_start', '09:00'))
+            ->format('H:i:s');
 
         $attendance = $employee?->attendances()
-            ->whereBetween('check_in_at', [$now->startOfDay(), $now->endOfDay()])
-            ->where('status', '!=', 'rejected')
-            ->orderBy('check_in_at')
+            ->where('tanggal', $now->toDateString())
+            ->where('status_persetujuan', '!=', 'rejected')
             ->first();
 
-        $checkIn = $attendance?->check_in_at;
+        $jamMasuk = $attendance?->jam_masuk;
 
         return view('dashboard.employee', [
             'user' => $user,
@@ -219,9 +221,9 @@ class DashboardController extends Controller
             'employee' => $employee,
             'greeting' => $this->greeting($now),
             'dateLabel' => $now->locale('id')->translatedFormat('l, j F Y'),
-            'checkIn' => $checkIn?->format('H.i'),
-            'isLate' => $checkIn ? $checkIn->greaterThan($cutoff) : false,
-            'workStart' => $cutoff->format('H.i'),
+            'checkIn' => $jamMasuk ? CarbonImmutable::parse($jamMasuk)->format('H.i') : null,
+            'isLate' => $jamMasuk ? $jamMasuk > $cutoffTime : false,
+            'workStart' => substr($cutoffTime, 0, 5),
         ]);
     }
 
@@ -231,16 +233,19 @@ class DashboardController extends Controller
 
     /**
      * Karyawan yang boleh dilihat user ini:
-     * Super Admin / HRD / Direktur = semua karyawan (akun approved);
+     * Super Admin / HRD / Direktur = semua karyawan aktif (akun aktif & disetujui);
      * Supervisor = hanya bawahan langsungnya.
      */
     private function scopedEmployees(User $user): Builder
     {
         $query = Employee::query()
-            ->whereHas('user', fn (Builder $q) => $q->where('status', 'approved'));
+            ->where('tbl_karyawan.status', 'aktif')
+            ->whereHas('user', fn (Builder $q) => $q
+                ->where('status_persetujuan', 'approved')
+                ->where('status', 'aktif'));
 
         if ($user->isSupervisor()) {
-            $query->where('employees.supervisor_id', $user->employee?->id ?? 0);
+            $query->where('tbl_karyawan.id_atasan', $user->employee?->id_karyawan ?? 0);
         }
 
         return $query;
@@ -248,29 +253,33 @@ class DashboardController extends Controller
 
     /**
      * Kondisi reusable (dipakai whereHas / whereDoesntHave).
-     * "present" = ada check-in hari ini yang belum ditolak approver.
+     * "present" = ada absensi hari ini yang bukan alpha dan belum ditolak atasan.
      *
      * @return array{present: Closure, onTime: Closure, onLeave: Closure}
      */
-    private function statusScopes(CarbonImmutable $start, CarbonImmutable $end, CarbonImmutable $cutoff): array
+    private function statusScopes(CarbonImmutable $day, CarbonImmutable $cutoff): array
     {
+        $date = $day->toDateString();
+        $cutoffTime = $cutoff->format('H:i:s');
+
         $present = fn (Builder $q) => $q
-            ->whereBetween('check_in_at', [$start, $end])
-            ->where('status', '!=', 'rejected');
+            ->where('tanggal', $date)
+            ->where('status', '!=', 'alpha')
+            ->where('status_persetujuan', '!=', 'rejected');
 
         return [
             'present' => $present,
-            'onTime' => fn (Builder $q) => $present($q)->where('check_in_at', '<=', $cutoff),
+            'onTime' => fn (Builder $q) => $present($q)->where('jam_masuk', '<=', $cutoffTime),
             'onLeave' => fn (Builder $q) => $q
                 ->where('status', 'approved')
-                ->whereDate('start_date', '<=', $start->toDateString())
-                ->whereDate('end_date', '>=', $start->toDateString()),
+                ->whereDate('tanggal_mulai', '<=', $date)
+                ->whereDate('tanggal_selesai', '>=', $date),
         ];
     }
 
     /**
-     * Prioritas status: ada check-in > sedang cuti/izin disetujui > absent.
-     * "Late" = check-in pertama hari itu melewati jam masuk.
+     * Prioritas status: ada absensi > sedang cuti/izin disetujui > absent.
+     * "Late" = jam masuk hari itu melewati jam masuk kerja (config/attendance.php).
      */
     private function applyStatus(Builder $query, string $status, array $scopes): Builder
     {

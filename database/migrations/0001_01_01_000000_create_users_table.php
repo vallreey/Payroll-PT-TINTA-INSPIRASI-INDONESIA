@@ -8,28 +8,28 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Sumber: SDD tbl_pengguna + SRS v2.0 (5 role, registrasi butuh persetujuan Super Admin).
-        Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');                                  // nama lengkap
-            $table->string('username', 100)->nullable()->unique();   // NOT NULL setelah login/registrasi pindah ke username
-            $table->string('email')->unique();
-            $table->string('profile_photo_path')->nullable();
-            $table->timestamp('email_verified_at')->nullable();
+        // SDD tbl_pengguna. Nama lengkap TIDAK di sini, tetapi di tbl_karyawan.nama_lengkap (sesuai SDD);
+        // akun "Admin murni" tanpa data karyawan ditampilkan memakai username.
+        Schema::create('tbl_pengguna', function (Blueprint $table) {
+            $table->id('id_pengguna');
+            $table->string('username', 100)->nullable()->unique(); // NOT NULL setelah login/registrasi pindah ke username
+            $table->string('email', 150)->unique();
             $table->string('password');
-            // 5 role sesuai SRS: super_admin, hrd, supervisor, direktur, karyawan
+            // 5 role sesuai SRS v2.0: super_admin, hrd, supervisor, direktur, karyawan
             $table->enum('role', ['super_admin', 'hrd', 'supervisor', 'direktur', 'karyawan'])->default('karyawan');
-            // Status PERSETUJUAN registrasi (FR-001, use case 001/061)
-            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
-            // Akun aktif/nonaktif (Super Admin dapat menonaktifkan akun, AC-003)
-            $table->boolean('is_active')->default(true);
-            $table->foreignId('approved_by')->nullable()->constrained('users')->nullOnDelete();
+            // SDD: status akun aktif/nonaktif (Super Admin dapat menonaktifkan akun, AC-003)
+            $table->enum('status', ['aktif', 'nonaktif'])->default('aktif');
+            // Persetujuan registrasi oleh Super Admin (FR-001, use case 001/061, AC-002)
+            $table->enum('status_persetujuan', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->string('foto_profil')->nullable();
+            $table->foreignId('approved_by')->nullable()->constrained('tbl_pengguna', 'id_pengguna')->nullOnDelete();
             $table->timestamp('approved_at')->nullable();
-            $table->rememberToken();
+            $table->timestamp('email_verified_at')->nullable(); // kolom bawaan framework
+            $table->rememberToken();                            // kolom bawaan framework
             $table->timestamps();
 
-            $table->index('role', 'idx_users_role');
-            $table->index('status', 'idx_users_status');
+            $table->index('role', 'idx_pengguna_role');
+            $table->index('status_persetujuan', 'idx_pengguna_persetujuan');
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
@@ -50,7 +50,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('users');
+        Schema::dropIfExists('tbl_pengguna');
         Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');
     }

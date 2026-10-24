@@ -24,7 +24,7 @@
 <x-app-layout title="Dashboard">
 
     <x-slot:heading>
-        <h1 class="text-xl font-semibold text-gray-900 sm:text-2xl">Selamat {{ $greeting }}, {{ $user->name }} <span aria-hidden="true">👋</span></h1>
+        <h1 class="text-xl font-semibold text-gray-900 sm:text-2xl">Selamat {{ $greeting }}, {{ $user->nama_tampil }} <span aria-hidden="true">👋</span></h1>
         <p class="mt-0.5 text-xs text-gray-700">Hari ini {{ $dateLabel }}.</p>
     </x-slot:heading>
 
@@ -183,9 +183,9 @@
                             <ul class="mt-4 space-y-4">
                                 @foreach ($announcements as $a)
                                     <li>
-                                        <p class="text-sm font-medium text-gray-900">{{ $a->title }}</p>
-                                        <p class="mt-0.5 line-clamp-2 text-xs text-gray-600">{{ $a->body }}</p>
-                                        <p class="mt-1 text-[11px] text-gray-400">{{ $a->published_at->locale('id')->translatedFormat('j F Y') }}</p>
+                                        <p class="text-sm font-medium text-gray-900">{{ $a->judul }}</p>
+                                        <p class="mt-0.5 line-clamp-2 text-xs text-gray-600">{{ $a->isi }}</p>
+                                        <p class="mt-1 text-[11px] text-gray-400">{{ $a->tanggal_terbit->locale('id')->translatedFormat('j F Y') }}</p>
                                     </li>
                                 @endforeach
                             </ul>
@@ -227,12 +227,12 @@
                         <ul class="divide-y divide-gray-100">
                             @foreach ($submissions as $s)
                                 <li class="py-3 first:pt-0 last:pb-0">
-                                    <p class="text-sm font-medium text-gray-900">{{ $s->employee?->user?->name ?? '-' }}</p>
+                                    <p class="text-sm font-medium text-gray-900">{{ $s->employee?->nama_lengkap ?? '-' }}</p>
                                     <p class="text-xs text-gray-500">
-                                        {{ $s->leaveType?->name }},
-                                        {{ $s->start_date->locale('id')->translatedFormat('j M') }}
-                                        @if (! $s->start_date->isSameDay($s->end_date))
-                                            – {{ $s->end_date->locale('id')->translatedFormat('j M') }}
+                                        {{ ucfirst($s->jenis) }}@if ($s->sub_jenis) ({{ $s->sub_jenis }})@endif,
+                                        {{ $s->tanggal_mulai->locale('id')->translatedFormat('j M') }}
+                                        @if (! $s->tanggal_mulai->isSameDay($s->tanggal_selesai))
+                                            – {{ $s->tanggal_selesai->locale('id')->translatedFormat('j M') }}
                                         @endif
                                     </p>
                                 </li>
@@ -252,9 +252,9 @@
                         <ul class="divide-y divide-gray-100">
                             @foreach ($tasks as $t)
                                 <li class="py-3 first:pt-0 last:pb-0">
-                                    <p class="text-sm font-medium text-gray-900">{{ $t->title }}</p>
-                                    @if ($t->due_date)
-                                        <p class="text-xs text-gray-500">Tenggat {{ $t->due_date->locale('id')->translatedFormat('j F Y') }}</p>
+                                    <p class="text-sm font-medium text-gray-900">{{ $t->judul }}</p>
+                                    @if ($t->tenggat)
+                                        <p class="text-xs text-gray-500">Tenggat {{ $t->tenggat->locale('id')->translatedFormat('j F Y') }}</p>
                                     @endif
                                 </li>
                             @endforeach
@@ -296,25 +296,25 @@
                     <ul class="mt-5 space-y-4">
                         @foreach ($schedules as $e)
                             @php $extra = $e->attendees->count() - 3; @endphp
-                            <li x-show="filter === 'all' || filter === '{{ $e->type }}'"
+                            <li x-show="filter === 'all' || filter === '{{ $e->tipe }}'"
                                 class="flex items-center justify-between gap-3 rounded-xl border border-blue-600 p-4">
                                 <div class="min-w-0">
                                     <p class="flex items-center gap-2 text-xs font-medium text-gray-900">
-                                        <x-icon :name="$e->type === 'meeting' ? 'employees' : 'calendar'" size="size-4" />
-                                        <span class="truncate">{{ $e->title }}</span>
+                                        <x-icon :name="$e->tipe === 'meeting' ? 'employees' : 'calendar'" size="size-4" />
+                                        <span class="truncate">{{ $e->judul }}</span>
                                     </p>
                                     <p class="mt-2 flex flex-wrap items-center gap-x-2 text-[11px] text-gray-500">
-                                        <span>{{ $e->start_at->locale('id')->translatedFormat('j F, Y') }}</span>
+                                        <span>{{ $e->waktu_mulai->locale('id')->translatedFormat('j F, Y') }}</span>
                                         <span class="size-2 rounded-full bg-gray-300" aria-hidden="true"></span>
-                                        <span class="tabular-nums">{{ $e->start_at->format('H.i') }} - {{ $e->end_at->format('H.i') }}</span>
+                                        <span class="tabular-nums">{{ $e->waktu_mulai->format('H.i') }} - {{ $e->waktu_selesai->format('H.i') }}</span>
                                     </p>
-                                    @if ($e->location)
+                                    @if ($e->lokasi)
                                         <p class="mt-2 flex items-center gap-2 text-[11px] text-gray-900">
                                             <x-icon name="video" size="size-4" class="text-blue-600" />
-                                            {{ $e->location }}
-                                            @if ($safeUrl($e->meeting_url))
-                                                <a href="{{ $e->meeting_url }}" target="_blank" rel="noopener noreferrer"
-                                                   aria-label="Buka tautan {{ $e->title }}" class="hover:text-blue-600">
+                                            {{ $e->lokasi }}
+                                            @if ($safeUrl($e->url_meeting))
+                                                <a href="{{ $e->url_meeting }}" target="_blank" rel="noopener noreferrer"
+                                                   aria-label="Buka tautan {{ $e->judul }}" class="hover:text-blue-600">
                                                     <x-icon name="arrow-right" size="size-4" />
                                                 </a>
                                             @endif
@@ -324,7 +324,7 @@
                                 @if ($e->attendees->isNotEmpty())
                                     <div class="flex shrink-0 -space-x-3" aria-label="{{ $e->attendees->count() }} peserta">
                                         @foreach ($e->attendees->take(3) as $p)
-                                            <x-avatar :name="$p->user?->name ?? ''" :photo="$p->photo_url" size="size-10" class="border border-blue-600 bg-white" />
+                                            <x-avatar :name="$p->nama_lengkap" :photo="$p->photo_url" size="size-10" class="border border-blue-600 bg-white" />
                                         @endforeach
                                         @if ($extra > 0)
                                             <span class="flex size-10 items-center justify-center rounded-full border border-blue-600 bg-blue-50 text-xs font-medium text-blue-700">+{{ $extra }}</span>

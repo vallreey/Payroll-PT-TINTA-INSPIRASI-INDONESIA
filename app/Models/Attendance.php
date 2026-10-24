@@ -5,48 +5,50 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/** Tabel SDD: tbl_absensi (satu baris per karyawan per hari) */
 class Attendance extends Model
 {
     use HasFactory;
 
+    protected $table = 'tbl_absensi';
+
+    protected $primaryKey = 'id_absensi';
+
     protected $fillable = [
-        'employee_id',
-        'work_date',
-        'presence',
-        'photo_path',
-        'check_out_photo_path',
-        'latitude',
-        'longitude',
-        'check_out_latitude',
-        'check_out_longitude',
-        'check_in_at',
-        'check_out_at',
+        'id_karyawan',
+        'tanggal',
+        'jam_masuk',
+        'jam_keluar',
+        'foto_masuk',
+        'foto_keluar',
+        'lat_masuk',
+        'long_masuk',
+        'lat_keluar',
+        'long_keluar',
         'status',
+        'status_persetujuan',
         'approved_by',
         'approved_at',
-        'notes',
+        'keterangan',
     ];
 
-    // work_date sengaja TANPA cast 'date': ia bagian dari kunci unik (employee_id, work_date) dan harus
-    // tersimpan persis 'Y-m-d'. Cast 'date' menyimpan 'Y-m-d 00:00:00' di SQLite sehingga pencarian
-    // dengan 'Y-m-d' tidak cocok. Baca sebagai string, atau pakai Carbon::parse($attendance->work_date).
+    // `tanggal` sengaja TANPA cast 'date': ia bagian dari kunci unik (id_karyawan, tanggal) dan harus tersimpan
+    // persis 'Y-m-d'. Cast 'date' menyimpan 'Y-m-d 00:00:00' di SQLite sehingga pencarian 'Y-m-d' tidak cocok.
+    // jam_masuk / jam_keluar bertipe TIME (string 'H:i:s').
     protected static function booted(): void
     {
-        // Jaga invarian: satu baris = satu hari kerja (unique employee_id + work_date).
         static::creating(function (self $attendance) {
-            $attendance->work_date ??= $attendance->check_in_at?->toDateString();
+            $attendance->tanggal ??= now()->toDateString();
         });
     }
 
     protected function casts(): array
     {
         return [
-            'latitude' => 'decimal:7',
-            'longitude' => 'decimal:7',
-            'check_out_latitude' => 'decimal:7',
-            'check_out_longitude' => 'decimal:7',
-            'check_in_at' => 'datetime',
-            'check_out_at' => 'datetime',
+            'lat_masuk' => 'decimal:7',
+            'long_masuk' => 'decimal:7',
+            'lat_keluar' => 'decimal:7',
+            'long_keluar' => 'decimal:7',
             'approved_at' => 'datetime',
         ];
     }
@@ -55,23 +57,23 @@ class Attendance extends Model
 
     public function employee()
     {
-        return $this->belongsTo(Employee::class);
+        return $this->belongsTo(Employee::class, 'id_karyawan', 'id_karyawan');
     }
 
     public function approver()
     {
-        return $this->belongsTo(User::class, 'approved_by');
+        return $this->belongsTo(User::class, 'approved_by', 'id_pengguna');
     }
 
     // ================= Scope =================
 
     public function scopePending($query)
     {
-        return $query->where('status', 'pending');
+        return $query->where('status_persetujuan', 'pending');
     }
 
     public function scopeApproved($query)
     {
-        return $query->where('status', 'approved');
+        return $query->where('status_persetujuan', 'approved');
     }
 }

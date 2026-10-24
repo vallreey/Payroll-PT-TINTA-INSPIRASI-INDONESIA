@@ -5,31 +5,36 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/** Tabel SDD: tbl_izin_cuti */
 class LeaveRequest extends Model
 {
     use HasFactory;
 
+    protected $table = 'tbl_izin_cuti';
+
+    protected $primaryKey = 'id_izin';
+
     protected $fillable = [
-        'employee_id',
-        'leave_type_id',
-        'start_date',
-        'end_date',
-        'total_days',
-        'reason',
-        'attachment_path',
+        'id_karyawan',
+        'jenis',
+        'sub_jenis',
+        'tanggal_mulai',
+        'tanggal_selesai',
+        'total_hari',
+        'alasan',
+        'dokumen',
         'status',
         'approved_by',
         'approved_at',
-        'rejection_reason',
-        'approval_note',
+        'catatan_approval',
     ];
 
     protected function casts(): array
     {
         return [
-            'start_date' => 'date',
-            'end_date' => 'date',
-            'total_days' => 'integer',
+            'tanggal_mulai' => 'date',
+            'tanggal_selesai' => 'date',
+            'total_hari' => 'integer',
             'approved_at' => 'datetime',
         ];
     }
@@ -38,17 +43,12 @@ class LeaveRequest extends Model
 
     public function employee()
     {
-        return $this->belongsTo(Employee::class);
-    }
-
-    public function leaveType()
-    {
-        return $this->belongsTo(LeaveType::class);
+        return $this->belongsTo(Employee::class, 'id_karyawan', 'id_karyawan');
     }
 
     public function approver()
     {
-        return $this->belongsTo(User::class, 'approved_by');
+        return $this->belongsTo(User::class, 'approved_by', 'id_pengguna');
     }
 
     // ================= Scope =================
@@ -60,8 +60,9 @@ class LeaveRequest extends Model
 
     // ================= Helper =================
 
+    // Jumlah hari kalender inklusif (dasar awal total_hari; aturan hari libur ditangani Service)
     public function durationInDays(): int
     {
-        return $this->start_date->diffInDays($this->end_date) + 1;
+        return $this->tanggal_mulai->diffInDays($this->tanggal_selesai) + 1;
     }
 }

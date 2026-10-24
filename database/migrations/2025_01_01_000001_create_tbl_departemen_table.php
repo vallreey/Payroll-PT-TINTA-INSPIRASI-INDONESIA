@@ -9,16 +9,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('departments', function (Blueprint $table) {
-            $table->id();
-            $table->string('name')->unique();
-            $table->text('description')->nullable(); // deskripsi tugas departemen
+        Schema::create('tbl_departemen', function (Blueprint $table) {
+            $table->id('id_departemen');
+            $table->string('nama_departemen', 100)->unique();
+            $table->text('deskripsi')->nullable(); // deskripsi tugas departemen
             $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('departments');
+        Schema::dropIfExists('tbl_departemen');
     }
 };

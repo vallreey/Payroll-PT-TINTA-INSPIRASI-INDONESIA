@@ -1,8 +1,9 @@
 # Dokumentasi Database — Sistem Kepegawaian Berbasis Payroll PT Tinta Inspirasi Indonesia
 
-Sumber: SDD v1.0 (bab 2) dan SRS v2.0. Skema dibangun **hanya** lewat migrasi Laravel
-(`database/migrations`), sehingga pindah ke server cukup dengan `php artisan migrate`.
-Diuji: SQLite (phpunit) dan MariaDB 10.11 (kompatibel MySQL) untuk `migrate:fresh`, seeding, dan rollback penuh.
+Sumber: SDD v1.0 (bab 2) dan SRS v2.0. Nama tabel dan kolom **mengikuti SDD** (`tbl_pengguna`, `id_karyawan`,
+`nama_lengkap`, dst.). Skema dibangun hanya lewat migrasi Laravel (`database/migrations`), sehingga pindah ke server
+cukup dengan `php artisan migrate`. Diuji di SQLite (phpunit) dan MariaDB 10.11 (kompatibel MySQL):
+`migrate:fresh`, seeding, seluruh test, dan rollback penuh.
 
 ## 1. Deploy ke server (tanpa setting ulang)
 
@@ -13,7 +14,7 @@ mysql -u root -p -e "CREATE DATABASE payroll_tintainspirasi CHARACTER SET utf8mb
 # 2. Isi .env server: DB_CONNECTION=mysql, DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD,
 #    APP_ENV=production, APP_DEBUG=false, APP_TIMEZONE=Asia/Jakarta, APP_LOCALE=id
 
-# 3. Buat seluruh struktur + data awal wajib (jenis cuti, departemen General, akun Super Admin)
+# 3. Buat seluruh struktur + data awal wajib (departemen General + akun Super Admin)
 php artisan migrate --force
 php artisan db:seed --class=PayrollSystemSeeder --force
 
@@ -21,103 +22,88 @@ php artisan db:seed --class=PayrollSystemSeeder --force
 php artisan storage:link
 ```
 
-Aturan: **jangan** pernah `migrate:fresh` / `migrate:rollback` di server berisi data. Perubahan skema berikutnya
-selalu dengan migrasi baru (jangan edit migrasi lama yang sudah dijalankan di server). Backup dulu: `mysqldump`.
+Aturan: **jangan** `migrate:fresh` / `migrate:rollback` di server berisi data. Perubahan skema berikutnya selalu
+dengan migrasi baru (jangan edit migrasi yang sudah dijalankan di server). Backup dulu dengan `mysqldump`.
 `DashboardDemoSeeder` hanya untuk development dan menolak jalan di production.
 
-## 2. Pemetaan SDD → implementasi
+Database lokal lama harus dibuat ulang: `php artisan migrate:fresh --seed --seeder=PayrollSystemSeeder`.
 
-Nama tabel/kolom memakai konvensi Laravel (Inggris, jamak) agar sesuai Eloquent dan kode yang sudah ada,
-bukan `tbl_*` Indonesia pada SDD. Padanannya:
+## 2. Tabel
 
-| SDD | Tabel implementasi | Catatan |
+| Tabel (SDD) | PK | Isi |
 |---|---|---|
-| tbl_pengguna | `users` | `nama_lengkap` ada di sini (`name`); `username`, `foto_profil` (`profile_photo_path`), `status aktif/nonaktif` (`is_active`) |
-| tbl_karyawan | `employees` | `gaji_pokok` = `base_salary`; `sisa_cuti` → tabel `leave_quotas`; `dokumen_ktp` → `employee_documents` |
-| tbl_departemen | `departments` | |
-| tbl_absensi | `attendances` | foto/koordinat masuk & keluar, `work_date`, `presence` |
-| tbl_izin_cuti | `leave_requests` + `leave_types` | `jenis` → `leave_types.category` |
-| tbl_penggajian | `payrolls` + `payroll_periods` | `bulan`/`tahun` → `payroll_periods` |
-| tbl_tracking_lokasi | `location_trackings` | `tanggal`/`waktu` → `recorded_at`; `keterangan` → `note` |
-| tbl_notifikasi | `notifications` | tabel bawaan Laravel (lihat §5) |
+| `tbl_pengguna` | `id_pengguna` | akun login: `username`, `email`, `password`, `role`, `status` (aktif/nonaktif), `status_persetujuan`, `foto_profil` |
+| `tbl_karyawan` | `id_karyawan` | data SDM: `nik`, `nama_lengkap`, `jabatan`, `gaji_pokok`, `sisa_cuti`, `status`, `dokumen_ktp`, `id_atasan` |
+| `tbl_departemen` | `id_departemen` | `nama_departemen`, `deskripsi` |
+| `tbl_absensi` | `id_absensi` | satu baris per karyawan per hari: `tanggal`, `jam_masuk/keluar`, `foto_*`, `lat_*`, `long_*`, `status`, `status_persetujuan` |
+| `tbl_izin_cuti` | `id_izin` | `jenis` (izin/cuti/sakit), `tanggal_mulai/selesai`, `total_hari`, `alasan`, `status`, `approved_by`, `catatan_approval` |
+| `tbl_penggajian` | `id_penggajian` | `bulan`, `tahun`, `gaji_pokok`, `tunjangan`, `potongan_absensi`, `pph21`, `bpjs_tk`, `bpjs_kes`, `gaji_bersih`, `status`, `tanggal_bayar` |
+| `tbl_tracking_lokasi` | `id_tracking` | `tanggal`, `waktu`, `latitude`, `longitude`, `keterangan` |
+| `tbl_notifikasi` | `id_notifikasi` | `judul`, `pesan`, `tipe` (izin/cuti/absensi/gaji), `is_read` |
+| `tbl_dokumen_karyawan` | `id_dokumen` | dokumen digital selain KTP (SRS 3.2) |
+| `tbl_layanan`, `tbl_pekerjaan`, `tbl_pengumuman`, `tbl_jadwal`, `tbl_peserta_jadwal`, `tbl_tugas` | | **DUMMY** untuk dashboard (bukan SDD); boleh diubah sebelum production |
 
-Tabel tambahan di luar SDD: `employee_documents`, `leave_quotas`, `payroll_periods`, `leave_types`
-(normalisasi), `password_reset_tokens`, `sessions`, `cache*`, `jobs*` (infrastruktur Laravel), serta tabel
-**DUMMY dashboard** `services`, `job_orders`, `announcements`, `schedules`, `schedule_attendees`, `tasks`.
+Tabel infrastruktur Laravel (`sessions`, `cache*`, `jobs*`, `failed_jobs`, `password_reset_tokens`, `migrations`) tidak
+di-rename karena dipakai langsung oleh framework.
 
 ## 3. ERD
 
 ```mermaid
 erDiagram
-    users ||--o| employees : "1 akun = 1 karyawan"
-    departments ||--o{ employees : memiliki
-    employees ||--o{ employees : "supervisor_id (atasan)"
-    employees ||--o{ employee_documents : punya
-    employees ||--o{ attendances : "1 baris per hari"
-    employees ||--o{ location_trackings : jejak
-    employees ||--o{ leave_quotas : kuota
-    employees ||--o{ leave_requests : mengajukan
-    leave_types ||--o{ leave_requests : jenis
-    leave_types ||--o{ leave_quotas : jenis
-    employees ||--o{ payrolls : digaji
-    payroll_periods ||--o{ payrolls : periode
-    users ||--o{ notifications : "notifiable (polymorphic)"
-    users ||--o{ attendances : "approved_by"
-    users ||--o{ leave_requests : "approved_by"
-    users ||--o{ payrolls : "approved_by"
+    tbl_pengguna ||--o| tbl_karyawan : "1 akun = 1 karyawan (Admin murni tanpa karyawan)"
+    tbl_departemen ||--o{ tbl_karyawan : memiliki
+    tbl_karyawan ||--o{ tbl_karyawan : "id_atasan"
+    tbl_karyawan ||--o{ tbl_dokumen_karyawan : punya
+    tbl_karyawan ||--o{ tbl_absensi : "1 baris per hari"
+    tbl_karyawan ||--o{ tbl_tracking_lokasi : jejak
+    tbl_karyawan ||--o{ tbl_izin_cuti : mengajukan
+    tbl_karyawan ||--o{ tbl_penggajian : digaji
+    tbl_pengguna ||--o{ tbl_notifikasi : menerima
+    tbl_pengguna ||--o{ tbl_absensi : "approved_by"
+    tbl_pengguna ||--o{ tbl_izin_cuti : "approved_by"
+    tbl_pengguna ||--o{ tbl_penggajian : "approved_by"
 ```
 
 ## 4. Aturan data penting
 
 | Aturan | Dijaga oleh |
 |---|---|
-| 5 role: `super_admin, hrd, supervisor, direktur, karyawan` (SRS v2.0) | enum `users.role` |
-| Registrasi menunggu persetujuan Super Admin | `users.status` = `pending/approved/rejected` |
-| Akun bisa dinonaktifkan tanpa dihapus | `users.is_active` |
-| Satu absensi per karyawan per hari | `unique(employee_id, work_date)` |
-| Check-in memakai `photo_path/latitude/longitude`; check-out memakai `check_out_*` | konvensi kolom |
-| `attendances.status` = status persetujuan; `presence` = hadir/terlambat/alpha (snapshot saat dicatat) | dua kolom berbeda |
-| Satu gaji per karyawan per periode | `unique(employee_id, payroll_period_id)` |
-| Satu kuota per karyawan, jenis cuti, tahun | `unique(employee_id, leave_type_id, year)` |
-| Satu NIK / username / email | unique |
+| 5 role: `super_admin, hrd, supervisor, direktur, karyawan` (SRS v2.0) | enum `tbl_pengguna.role` |
+| Registrasi menunggu persetujuan Super Admin; akun nonaktif tidak bisa login | `status_persetujuan` + `status`, dicek saat login |
+| Satu absensi per karyawan per hari | `unique(id_karyawan, tanggal)` = `idx_absensi_tgl` |
+| Satu slip gaji per karyawan per bulan | `unique(id_karyawan, bulan, tahun)` |
+| Satu NIK, satu email, satu username | unique |
 | Hapus akun → data karyawan ikut terhapus; hapus approver → `approved_by` jadi NULL | FK `cascade` / `nullOnDelete` |
+| `tanggal` absensi tersimpan persis `Y-m-d` | model tanpa cast `date` (aman di SQLite & MySQL) |
 
-## 5. Keputusan desain yang berbeda dari SDD (dan alasannya)
+## 5. Pemetaan SDD yang tidak harfiah (dan alasannya)
 
-1. **Nama Laravel, bukan `tbl_*`** — sesuai konvensi dan kode yang sudah berjalan (model, seeder, dashboard).
-2. **5 role, bukan 3** — SDD v1.0 menulis `admin/hrd/karyawan`; SRS v2.0 (lebih baru) memakai 5 role. SRS yang dipakai.
-3. **Status karyawan `cuti` tidak disimpan** — diturunkan dari `leave_requests` yang disetujui dan mencakup hari ini; menyimpannya berarti data yang bisa basi.
-4. **`sisa_cuti` → `leave_quotas`** — kuota per jenis per tahun; sisa = `quota - used`. Satu kolom `sisa_cuti` tidak bisa menampung jenis cuti lain dan pergantian tahun.
-5. **Notifikasi memakai tabel bawaan Laravel** — `$user->notify()`, `unreadNotifications`, `markAsRead()` langsung bekerja. `judul/pesan/tipe` disimpan di JSON `data`; `is_read` = `read_at IS NOT NULL`.
-6. **Function/Procedure/Trigger SDD tidak dibuat di database** (`hitung_gaji_bersih`, `hitung_pph21`, `generate_penggajian`, `trg_kurangi_cuti`, `trg_notif_izin`) — SDD menulis PostgreSQL tetapi proyek berjalan di MySQL; sintaks beda antar engine, logika tersembunyi dan sulit di-test. SDD §5 sendiri menempatkannya di Service (`PayrollService`, `ApprovalService`, `NotificationService`). **Ini pekerjaan berikutnya.**
-7. **View `v_karyawan_aktif`, `v_slip_gaji`, `v_rekap_absensi` dan index `idx_absensi_tgl` dibuat.** View hanya di MySQL/MariaDB/PostgreSQL (dilewati di SQLite). Di `v_rekap_absensi`, hari izin/cuti/sakit dihitung pada bulan tanggal mulainya.
-8. **`payrolls.bpjs_deduction` dipertahankan sebagai total** (= `bpjs_tk_deduction` + `bpjs_kes_deduction`); diisi PayrollService.
-9. **`leave_requests.total_days`** ditambahkan (tidak ada di SDD) sebagai dasar pemotongan kuota yang menggantikan trigger.
-10. **`users.username` masih nullable** — login/registrasi saat ini berbasis email. Jadikan NOT NULL setelah alur auth pindah ke username (SRS use case 001/002, AC-001).
+1. **Nama lengkap hanya di `tbl_karyawan`** (sesuai SDD). Akun "Admin murni" tanpa data karyawan ditampilkan memakai `username` (`User::nama_tampil`).
+2. **`status` dua kolom di `tbl_pengguna`.** `status` = aktif/nonaktif (SDD). `status_persetujuan` = pending/approved/rejected (alur registrasi SRS use case 001/061). Keduanya dicek saat login.
+3. **`tbl_absensi`**: `status` = hadir/terlambat/alpha (SDD); `status_persetujuan` ditambah untuk fitur Persetujuan Absensi (SRS).
+4. **Status karyawan `cuti` tidak disimpan** (SDD: aktif/nonaktif/cuti). Diturunkan dari `tbl_izin_cuti` yang disetujui dan mencakup hari ini, agar tidak ada data basi.
+5. **`tbl_penggajian.status`** diperluas dari `draft/approved/paid` dengan `pending_approval` dan `rejected` untuk alur persetujuan SRS. Gaji kotor tidak disimpan (= `gaji_pokok + tunjangan`).
+6. **Tambahan kecil**: `tbl_izin_cuti.sub_jenis` dan `total_hari` (dasar pemotongan `sisa_cuti`, pengganti trigger), `tbl_karyawan.id_atasan`, `jenis_kelamin`, `tanggal_lahir`, `status_kepegawaian`, data rekening.
+7. **Foto karyawan** = `tbl_pengguna.foto_profil` (tidak ada kolom foto kedua).
+8. **Function/Procedure/Trigger SDD tidak dibuat di database** (`hitung_gaji_bersih`, `hitung_pph21`, `generate_penggajian`, `trg_kurangi_cuti`, `trg_notif_izin`): SDD menulis PostgreSQL sedangkan proyek berjalan di MySQL; sintaks beda antar engine dan sulit di-test. SDD §5 sendiri menempatkannya di Service (`PayrollService`, `ApprovalService`, `NotificationService`). Rumus gaji bersih sudah ada di `Payroll::recalculate()`.
+9. **View `v_karyawan_aktif`, `v_slip_gaji`, `v_rekap_absensi`** dibuat (hanya MySQL/MariaDB/PostgreSQL; dilewati di SQLite). Hari izin/cuti/sakit pada rekap dihitung di bulan tanggal mulainya.
+10. **Kunci primer** bertipe `bigint unsigned` (default Laravel), bukan `integer(10)` seperti SDD.
+11. **`username` masih nullable**: login/registrasi saat ini berbasis email. Jadikan NOT NULL setelah alur auth pindah ke username (SRS use case 001/002, AC-001).
+12. **Notifikasi memakai tabel SDD sendiri** (`tbl_notifikasi`), bukan tabel `notifications` bawaan Laravel, sehingga `$user->notify()` tidak dipakai; pengisian lewat `NotificationService`.
 
-## 6. Urutan migrasi (satu migrasi per tabel, skema final)
+## 6. Urutan migrasi
 
 | File | Isi |
 |---|---|
-| `0001_01_01_000000_create_users_table` | `users` (+ kolom SDD/SRS), `password_reset_tokens`, `sessions` |
+| `0001_01_01_000000_create_users_table` | `tbl_pengguna`, `password_reset_tokens`, `sessions` (nama file dipertahankan agar menimpa file bawaan) |
 | `0001_01_01_000001/2` | `cache*`, `jobs*` (bawaan Laravel) |
-| `2025_01_01_000001`–`000003` | `departments`, `employees`, `employee_documents` |
-| `000004`–`000005` | `attendances`, `location_trackings` |
-| `000006`–`000008` | `leave_types`, `leave_quotas`, `leave_requests` |
-| `000009`–`000010` | `payroll_periods`, `payrolls` |
-| `000011` | `notifications` |
-| `000012`–`000016` | tabel DUMMY dashboard: `services`, `job_orders`, `announcements`, `schedules` + `schedule_attendees`, `tasks` |
-| `000017` | view `v_karyawan_aktif`, `v_slip_gaji`, `v_rekap_absensi` |
-
-Set ini menggantikan seluruh migrasi lama (termasuk migrasi `ALTER` bertahap). Skemanya diverifikasi identik
-dengan hasil migrasi lama (kolom, tipe, default, index, FK, view) sebelum yang lama dihapus.
-
-**Database lokal lama harus dibuat ulang**: `php artisan migrate:fresh --seed --seeder=PayrollSystemSeeder`
-(lalu opsional `--class=DashboardDemoSeeder`). Karena riwayat migrasi berubah, `php artisan migrate` biasa akan gagal
-di database lama. Hanya aman karena belum ada data nyata/server production.
+| `2025_01_01_000001`–`000003` | `tbl_departemen`, `tbl_karyawan`, `tbl_dokumen_karyawan` |
+| `000004`–`000008` | `tbl_absensi`, `tbl_tracking_lokasi`, `tbl_izin_cuti`, `tbl_penggajian`, `tbl_notifikasi` |
+| `000009`–`000013` | tabel DUMMY dashboard |
+| `000014` | view laporan |
 
 ## 7. Belum tercakup (perlu keputusan)
 
 - **"Ambil Gaji"** (SRS use case 005/018/031/044/057): karyawan mengisi form pengambilan gaji lalu disetujui atasan. Tidak ada tabelnya di SDD; kolom yang dibutuhkan belum didefinisikan.
-- **Audit log** (siapa mengubah gaji/absensi) — tidak diminta SDD, tetapi lazim untuk sistem payroll.
-- Penentuan tunjangan terperinci (transport, makan): SDD hanya menyimpan total `allowance`.
+- **Audit log** (siapa mengubah gaji/absensi): tidak diminta SDD, tetapi lazim untuk sistem payroll.
+- **Login dengan username** (AC-001): sekarang email saja.
