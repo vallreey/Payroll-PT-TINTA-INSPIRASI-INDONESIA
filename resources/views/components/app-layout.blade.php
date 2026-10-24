@@ -52,7 +52,7 @@
 
     {{-- ================= SIDEBAR ================= --}}
     <aside id="sidebar"
-           class="fixed inset-y-0 left-0 z-40 flex w-64 -translate-x-full flex-col bg-white shadow-card transition-transform duration-200 lg:translate-x-0"
+           class="fixed inset-y-0 left-0 z-40 flex w-[230px] -translate-x-full flex-col bg-white shadow-card transition-transform duration-200 lg:translate-x-0"
            :class="{ 'translate-x-0!': open, '-translate-x-full!': !open }"
            aria-label="Menu utama">
 
@@ -70,7 +70,7 @@
                 @if ($ready)
                     <a href="{{ route($item['route']) }}"
                        @if ($active) aria-current="page" @endif
-                       class="relative flex items-center gap-4 px-8 py-3.5 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-500 {{ $active ? 'bg-blue-50 font-medium text-blue-600' : 'text-gray-800 hover:bg-gray-50' }}">
+                       class="relative flex items-center gap-3.5 whitespace-nowrap py-3.5 pl-7 pr-3 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-500 {{ $active ? 'bg-blue-50 font-medium text-blue-600' : 'text-gray-800 hover:bg-gray-50' }}">
                         @if ($active)
                             <span class="absolute inset-y-0 left-0 w-1.5 rounded-r-full bg-blue-600" aria-hidden="true"></span>
                         @endif
@@ -79,7 +79,7 @@
                     </a>
                 @else
                     <span aria-disabled="true" title="Halaman belum tersedia"
-                          class="flex cursor-not-allowed items-center gap-4 px-8 py-3.5 text-sm text-gray-400">
+                          class="flex cursor-default items-center gap-3.5 whitespace-nowrap py-3.5 pl-7 pr-3 text-sm text-gray-800">
                         <x-icon :name="$item['icon']" />
                         {{ $item['label'] }}
                     </span>
@@ -89,7 +89,7 @@
     </aside>
 
     {{-- ================= KONTEN ================= --}}
-    <div class="transition-[padding] duration-200 lg:pl-64" :class="{ 'lg:pl-0!': !open }">
+    <div class="transition-[padding] duration-200 lg:pl-[230px]" :class="{ 'lg:pl-0!': !open }">
         <header class="flex items-start justify-between gap-4 px-4 pt-4 sm:px-6 lg:px-8">
             <div class="flex min-w-0 items-start gap-4">
                 <button type="button" @click="open = !open"

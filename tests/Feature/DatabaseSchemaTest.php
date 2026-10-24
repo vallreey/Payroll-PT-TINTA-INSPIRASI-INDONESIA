@@ -44,8 +44,9 @@ class DatabaseSchemaTest extends TestCase
         }
 
         // Tabel nama lama tidak boleh tersisa
-        foreach (['users', 'employees', 'attendances', 'leave_requests', 'payrolls', 'departments', 'notifications'] as $old) {
-            $this->assertFalse(Schema::hasTable($old), "Tabel lama {$old} masih ada");
+        foreach (['users', 'employees', 'attendances', 'leave_requests', 'payrolls', 'departments', 'notifications',
+            'tbl_layanan', 'tbl_pekerjaan', 'tbl_pengumuman', 'tbl_jadwal', 'tbl_peserta_jadwal', 'tbl_tugas'] as $old) {
+            $this->assertFalse(Schema::hasTable($old), "Tabel {$old} seharusnya tidak ada (bukan bagian SDD)");
         }
     }
 

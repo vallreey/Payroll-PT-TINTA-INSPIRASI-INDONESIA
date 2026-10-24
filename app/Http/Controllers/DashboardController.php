@@ -2,15 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Announcement;
 use App\Models\Attendance;
 use App\Models\Department;
 use App\Models\Employee;
-use App\Models\JobOrder;
 use App\Models\LeaveRequest;
-use App\Models\Schedule;
-use App\Models\Service;
-use App\Models\Task;
+use App\Models\Notifikasi;
+use App\Models\Payroll;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Closure;
@@ -22,6 +19,8 @@ use Illuminate\Support\Str;
 class DashboardController extends Controller
 {
     private const STATUSES = ['on_time', 'late', 'absent', 'leave'];
+
+    private const NOTIFICATION_TYPES = ['izin', 'cuti', 'absensi', 'gaji'];
 
     private const ROWS = 6;
 
@@ -47,38 +46,44 @@ class DashboardController extends Controller
 
         $scopes = $this->statusScopes($dayStart, $cutoff);
         $scope = $this->scopedEmployees($user);
-
-        // ---- Kartu statistik ----
-        $quarterStart = $now->startOfQuarter();
-
-        $totalEmployees = (clone $scope)->count();
-        $newEmployees = (clone $scope)->where('tbl_karyawan.created_at', '>=', $quarterStart)->count();
-
-        $totalServices = Service::query()->count();
-        $newServices = Service::query()->where('created_at', '>=', $quarterStart)->count();
-
-        $totalJobs = JobOrder::query()->count();
-        $newJobs = JobOrder::query()->where('created_at', '>=', $quarterStart)->count();
-
-        $totalDepartments = Department::query()->count();
-        $newDepartments = Department::query()->where('created_at', '>=', $quarterStart)->count();
-
-        $stats = [
-            ['label' => 'Total karyawan', 'value' => $totalEmployees, 'icon' => 'employees', 'tone' => 'pink', 'route' => 'employees.index',
-                'caption' => $newEmployees > 0 ? "{$newEmployees} more than last quarter" : null],
-            ['label' => 'Total service', 'value' => $totalServices, 'icon' => 'code', 'tone' => 'violet', 'route' => null,
-                'caption' => $this->growthCaption($totalServices, $newServices)],
-            ['label' => 'Total job', 'value' => $totalJobs, 'icon' => 'documents', 'tone' => 'blue', 'route' => null,
-                'caption' => $this->growthCaption($totalJobs, $newJobs)],
-            ['label' => 'Total divisi', 'value' => $totalDepartments, 'icon' => 'org', 'tone' => 'green', 'route' => null,
-                'caption' => $newDepartments > 0 ? "{$newDepartments} more than last quarter" : null],
-        ];
+        $scopeIds = (clone $scope)->select('tbl_karyawan.id_karyawan');
 
         // ---- Ringkasan absensi hari ini ----
         $summary = [];
         foreach (self::STATUSES as $key) {
             $summary[$key] = $this->applyStatus(clone $scope, $key, $scopes)->count();
         }
+
+        // ---- Antrean persetujuan (data nyata dari SDD) ----
+        $pendingLeave = LeaveRequest::query()->pending()->whereIn('id_karyawan', $scopeIds);
+        $pendingLeaveTotal = (clone $pendingLeave)->count();
+        $pendingAttendance = Attendance::query()->pending()->whereIn('id_karyawan', $scopeIds);
+        $pendingAttendanceTotal = (clone $pendingAttendance)->count();
+        $pendingPayroll = Payroll::query()->pendingApproval()->whereIn('id_karyawan', $scopeIds);
+        $pendingPayrollTotal = (clone $pendingPayroll)->count();
+        $pendingTotal = $pendingLeaveTotal + $pendingAttendanceTotal + $pendingPayrollTotal;
+
+        // ---- Kartu statistik ----
+        $quarterStart = $now->startOfQuarter();
+
+        $totalEmployees = (clone $scope)->count();
+        $newEmployees = (clone $scope)->where('tbl_karyawan.created_at', '>=', $quarterStart)->count();
+        $totalDepartments = Department::query()->count();
+        $newDepartments = Department::query()->where('created_at', '>=', $quarterStart)->count();
+        $present = $summary['on_time'] + $summary['late'];
+
+        $stats = [
+            ['label' => 'Total karyawan', 'value' => $totalEmployees, 'icon' => 'employees', 'tone' => 'pink', 'route' => 'employees.index',
+                'caption' => $newEmployees > 0 ? ['text' => "{$newEmployees} more than last quarter", 'trend' => true] : null],
+            ['label' => 'Hadir hari ini', 'value' => $present, 'icon' => 'attendance', 'tone' => 'violet', 'route' => 'attendance.index',
+                'caption' => ['text' => "{$summary['late']} terlambat, {$summary['absent']} absen", 'trend' => false]],
+            ['label' => 'Pending approval', 'value' => $pendingTotal, 'icon' => 'documents', 'tone' => 'blue', 'route' => null,
+                'caption' => $pendingTotal > 0
+                    ? ['text' => "{$pendingLeaveTotal} izin, {$pendingAttendanceTotal} absen, {$pendingPayrollTotal} gaji", 'trend' => false]
+                    : null],
+            ['label' => 'Total divisi', 'value' => $totalDepartments, 'icon' => 'org', 'tone' => 'green', 'route' => null,
+                'caption' => $newDepartments > 0 ? ['text' => "{$newDepartments} more than last quarter", 'trend' => true] : null],
+        ];
 
         // ---- 6 aktivitas check-in terbaru hari ini (daftar lengkap ada di halaman Absensi) ----
         $firstCheckIn = Attendance::query()
@@ -120,60 +125,57 @@ class DashboardController extends Controller
             ];
         });
 
-        // ---- Announcement (search + filter periode) ----
+        // ---- Notification: tbl_notifikasi milik user yang login (search + filter tipe) ----
         $search = Str::limit(trim((string) $request->query('q', '')), 100, '');
-        $period = $request->query('period');
-        $period = in_array($period, ['week', 'month'], true) ? $period : null;
+        $tipe = $request->query('tipe');
+        $tipe = in_array($tipe, self::NOTIFICATION_TYPES, true) ? $tipe : null;
 
-        $announcementQuery = Announcement::query()
-            ->whereNotNull('tanggal_terbit')
-            ->where('tanggal_terbit', '<=', $now);
+        $notificationQuery = Notifikasi::query()->where('id_pengguna', $user->id_pengguna);
+        $unreadTotal = (clone $notificationQuery)->belumDibaca()->count();
 
         if ($search !== '') {
             $like = '%'.addcslashes($search, '%_\\').'%';
-            $announcementQuery->where(fn (Builder $q) => $q->where('judul', 'like', $like)->orWhere('isi', 'like', $like));
+            $notificationQuery->where(fn (Builder $q) => $q->where('judul', 'like', $like)->orWhere('pesan', 'like', $like));
         }
-        if ($period === 'week') {
-            $announcementQuery->where('tanggal_terbit', '>=', $now->startOfWeek());
-        } elseif ($period === 'month') {
-            $announcementQuery->where('tanggal_terbit', '>=', $now->startOfMonth());
+        if ($tipe !== null) {
+            $notificationQuery->where('tipe', $tipe);
         }
 
-        $announcements = $announcementQuery->latest('tanggal_terbit')->limit(10)->get();
+        $notifications = $notificationQuery->orderByDesc('created_at')->orderByDesc('id_notifikasi')->limit(10)->get();
 
-        // ---- Submission: pengajuan izin/cuti pending ----
-        $pendingQuery = LeaveRequest::query()
-            ->pending()
-            ->whereIn('id_karyawan', (clone $scope)->select('tbl_karyawan.id_karyawan'));
-        $pendingTotal = (clone $pendingQuery)->count();
-        $submissions = $pendingQuery
+        // ---- Submission: pengajuan izin/cuti yang menunggu persetujuan ----
+        $submissions = (clone $pendingLeave)
             ->with('employee:id_karyawan,nama_lengkap')
             ->latest()
             ->limit(5)
             ->get();
 
-        // ---- Task milik user yang login ----
-        $tasks = Task::query()
-            ->where('id_karyawan', $user->employee?->id_karyawan ?? 0)
-            ->where('status', 'terbuka')
-            ->orderBy('tenggat')
-            ->limit(10)
-            ->get();
+        // ---- Approval: absensi dan penggajian yang menunggu persetujuan ----
+        $approvals = collect()
+            ->merge((clone $pendingAttendance)->with('employee:id_karyawan,nama_lengkap')->orderBy('tanggal', 'desc')->limit(5)->get()
+                ->map(fn (Attendance $a) => [
+                    'title' => 'Absensi '.($a->employee?->nama_lengkap ?? '-'),
+                    'subtitle' => CarbonImmutable::parse($a->tanggal)->locale('id')->translatedFormat('j M Y').', '
+                        .CarbonImmutable::parse($a->jam_masuk)->format('H.i'),
+                ]))
+            ->merge((clone $pendingPayroll)->with('employee:id_karyawan,nama_lengkap')->latest()->limit(5)->get()
+                ->map(fn (Payroll $g) => [
+                    'title' => 'Gaji '.($g->employee?->nama_lengkap ?? '-'),
+                    'subtitle' => CarbonImmutable::create($g->tahun, $g->bulan, 1)->locale('id')->translatedFormat('F Y'),
+                ]))
+            ->take(5)
+            ->values();
 
-        // ---- Schedule mendatang ----
-        // Super Admin / HRD / Direktur melihat semua; role lain hanya yang dibuat atau diikutinya.
-        $scheduleQuery = Schedule::query()->where('waktu_mulai', '>=', $dayStart);
-        if (! ($user->isSuperAdmin() || $user->isHrd() || $user->isDirektur())) {
-            $employeeId = $user->employee?->id_karyawan ?? 0;
-            $scheduleQuery->where(fn (Builder $q) => $q
-                ->where('dibuat_oleh', $user->id_pengguna)
-                ->orWhereHas('attendees', fn (Builder $a) => $a->where('tbl_karyawan.id_karyawan', $employeeId)));
-        }
+        // ---- Leave Schedule: izin/cuti/sakit yang disetujui dan belum berakhir ----
+        $scheduleQuery = LeaveRequest::query()
+            ->where('status', 'approved')
+            ->whereDate('tanggal_selesai', '>=', $dayStart->toDateString())
+            ->whereIn('id_karyawan', $scopeIds);
         $scheduleTotal = (clone $scheduleQuery)->count();
         $schedules = $scheduleQuery
-            ->with('attendees.user:id_pengguna,username,foto_profil')
-            ->orderBy('waktu_mulai')
-            ->limit(6)
+            ->with('employee.user:id_pengguna,username,foto_profil')
+            ->orderBy('tanggal_mulai')
+            ->limit(3)
             ->get();
 
         return view('dashboard.index', [
@@ -185,14 +187,15 @@ class DashboardController extends Controller
             'summary' => $summary,
             'rows' => $rows,
             'search' => $search,
-            'period' => $period,
-            'announcements' => $announcements,
-            'pendingTotal' => $pendingTotal,
+            'tipe' => $tipe,
+            'notifications' => $notifications,
+            'unreadTotal' => $unreadTotal,
+            'pendingLeaveTotal' => $pendingLeaveTotal,
             'submissions' => $submissions,
-            'tasks' => $tasks,
+            'approvals' => $approvals,
+            'approvalTotal' => $pendingAttendanceTotal + $pendingPayrollTotal,
             'schedules' => $schedules,
             'scheduleTotal' => $scheduleTotal,
-            'canAnnounce' => $user->isSuperAdmin() || $user->isHrd() || $user->isDirektur(),
         ]);
     }
 
@@ -292,19 +295,6 @@ class DashboardController extends Controller
             'absent' => $query->whereDoesntHave('attendances', $scopes['present'])
                 ->whereDoesntHave('leaveRequests', $scopes['onLeave']),
         };
-    }
-
-    private function growthCaption(int $total, int $added): ?string
-    {
-        if ($added <= 0) {
-            return null;
-        }
-
-        $before = $total - $added;
-
-        return $before > 0
-            ? round($added / $before * 100).'% more than last quarter'
-            : "{$added} new this quarter";
     }
 
     private function greeting(CarbonImmutable $now): string

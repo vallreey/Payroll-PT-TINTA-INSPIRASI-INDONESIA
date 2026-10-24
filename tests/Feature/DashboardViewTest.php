@@ -18,7 +18,7 @@ class DashboardViewTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Attendance');
-        $response->assertSee('Announcement');
+        $response->assertSee('Notification');
         $response->assertSee('Schedule');
     }
 

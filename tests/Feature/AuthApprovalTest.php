@@ -71,8 +71,8 @@ class AuthApprovalTest extends TestCase
             ->assertSee('Selamat')
             ->assertSee('superadmin')          // Admin murni: nama tampil = username
             ->assertSee('Rizky Pratama')       // nama dari tbl_karyawan.nama_lengkap (check-in terbaru 09.30)
-            ->assertSee('Interview Kandidat')
-            ->assertSee('Jadwal libur bersama');
+            ->assertSee('Pengajuan cuti baru')   // tbl_notifikasi milik Super Admin
+            ->assertSee('Leave Schedule');
     }
 
     public function test_demo_seeders_are_idempotent(): void

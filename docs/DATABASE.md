@@ -24,7 +24,7 @@ php artisan storage:link
 
 Aturan: **jangan** `migrate:fresh` / `migrate:rollback` di server berisi data. Perubahan skema berikutnya selalu
 dengan migrasi baru (jangan edit migrasi yang sudah dijalankan di server). Backup dulu dengan `mysqldump`.
-`DashboardDemoSeeder` hanya untuk development dan menolak jalan di production.
+`DashboardDemoSeeder` (data contoh karyawan, absensi, izin/cuti, penggajian, notifikasi) hanya untuk development dan menolak jalan di production.
 
 Database lokal lama harus dibuat ulang: `php artisan migrate:fresh --seed --seeder=PayrollSystemSeeder`.
 
@@ -41,7 +41,6 @@ Database lokal lama harus dibuat ulang: `php artisan migrate:fresh --seed --seed
 | `tbl_tracking_lokasi` | `id_tracking` | `tanggal`, `waktu`, `latitude`, `longitude`, `keterangan` |
 | `tbl_notifikasi` | `id_notifikasi` | `judul`, `pesan`, `tipe` (izin/cuti/absensi/gaji), `is_read` |
 | `tbl_dokumen_karyawan` | `id_dokumen` | dokumen digital selain KTP (SRS 3.2) |
-| `tbl_layanan`, `tbl_pekerjaan`, `tbl_pengumuman`, `tbl_jadwal`, `tbl_peserta_jadwal`, `tbl_tugas` | | **DUMMY** untuk dashboard (bukan SDD); boleh diubah sebelum production |
 
 Tabel infrastruktur Laravel (`sessions`, `cache*`, `jobs*`, `failed_jobs`, `password_reset_tokens`, `migrations`) tidak
 di-rename karena dipakai langsung oleh framework.
@@ -99,11 +98,26 @@ erDiagram
 | `0001_01_01_000001/2` | `cache*`, `jobs*` (bawaan Laravel) |
 | `2025_01_01_000001`–`000003` | `tbl_departemen`, `tbl_karyawan`, `tbl_dokumen_karyawan` |
 | `000004`–`000008` | `tbl_absensi`, `tbl_tracking_lokasi`, `tbl_izin_cuti`, `tbl_penggajian`, `tbl_notifikasi` |
-| `000009`–`000013` | tabel DUMMY dashboard |
-| `000014` | view laporan |
+| `000009` | view laporan (`v_karyawan_aktif`, `v_slip_gaji`, `v_rekap_absensi`) |
+
+Database hanya berisi tabel SDD (+ `tbl_dokumen_karyawan` dari SRS). Tidak ada tabel dummy.
 
 ## 7. Belum tercakup (perlu keputusan)
 
 - **"Ambil Gaji"** (SRS use case 005/018/031/044/057): karyawan mengisi form pengambilan gaji lalu disetujui atasan. Tidak ada tabelnya di SDD; kolom yang dibutuhkan belum didefinisikan.
 - **Audit log** (siapa mengubah gaji/absensi): tidak diminta SDD, tetapi lazim untuk sistem payroll.
 - **Login dengan username** (AC-001): sekarang email saja.
+
+## 8. Asal data tiap bagian dashboard
+
+| Bagian dashboard | Sumber data |
+|---|---|
+| Total karyawan, Total divisi | `tbl_karyawan`, `tbl_departemen` |
+| Hadir hari ini, ringkasan On-Time/Late/Absent/On Leave, tabel Attendance | `tbl_absensi` + `tbl_izin_cuti` (jam masuk dibandingkan dengan `config/attendance.php`) |
+| Pending approval | `tbl_izin_cuti` + `tbl_absensi` + `tbl_penggajian` berstatus menunggu |
+| Tab Notification (search + filter jenis) | `tbl_notifikasi` milik user yang login |
+| Tab Submission | `tbl_izin_cuti` berstatus `pending` |
+| Tab Approval | `tbl_absensi` `pending` dan `tbl_penggajian` `pending_approval` |
+| Leave Schedule (All/Cuti/Izin/Sakit) | `tbl_izin_cuti` berstatus `approved` yang belum berakhir |
+
+Komponen prototype yang tidak punya dasar di SDD (Total service, Total job, Announcement, Task, Schedule meeting) diganti dengan data di atas.

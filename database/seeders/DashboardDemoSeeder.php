@@ -2,15 +2,12 @@
 
 namespace Database\Seeders;
 
-use App\Models\Announcement;
 use App\Models\Attendance;
 use App\Models\Department;
 use App\Models\Employee;
-use App\Models\JobOrder;
 use App\Models\LeaveRequest;
-use App\Models\Schedule;
-use App\Models\Service;
-use App\Models\Task;
+use App\Models\Notifikasi;
+use App\Models\Payroll;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
@@ -75,6 +72,18 @@ class DashboardDemoSeeder extends Seeder
                 $this->checkIn($employee, $today->copy()->setTime(8, 45 + $pattern * 5));
             } elseif ($pattern === 3) {
                 $this->checkIn($employee, $today->copy()->setTime(9, 30));
+            }
+
+            if ($pattern === 0) {
+                $this->leaveOnce($employee, $today->copy()->addDay()->toDateString(), [
+                    'jenis' => 'izin', 'tanggal_selesai' => $today->copy()->addDay()->toDateString(), 'total_hari' => 1,
+                    'alasan' => 'Keperluan administrasi', 'status' => 'approved', 'approved_at' => now(),
+                ]);
+            } elseif ($pattern === 1) {
+                $this->leaveOnce($employee, $today->copy()->addDays(2)->toDateString(), [
+                    'jenis' => 'sakit', 'tanggal_selesai' => $today->copy()->addDays(3)->toDateString(), 'total_hari' => 2,
+                    'alasan' => 'Sakit, istirahat sesuai anjuran dokter', 'status' => 'approved', 'approved_at' => now(),
+                ]);
             } elseif ($pattern === 5) {
                 $this->leaveOnce($employee, $today->toDateString(), [
                     'jenis' => 'cuti', 'tanggal_selesai' => $today->copy()->addDay()->toDateString(), 'total_hari' => 2,
@@ -98,29 +107,36 @@ class DashboardDemoSeeder extends Seeder
     {
         $admin = User::where('role', 'super_admin')->first();
 
-        $services = collect(['Desain Grafis', 'Percetakan', 'Konten Digital'])
-            ->map(fn (string $name) => Service::firstOrCreate(['nama_layanan' => $name]));
-
-        foreach (['Cetak brosur', 'Desain logo', 'Video promosi', 'Banner event'] as $i => $judul) {
-            JobOrder::firstOrCreate(
-                ['judul' => $judul],
-                ['id_layanan' => $services[$i % $services->count()]->id_layanan, 'id_karyawan' => $employees[$i]->id_karyawan, 'status' => 'berjalan'],
-            );
+        // Notifikasi untuk Super Admin (tbl_notifikasi)
+        if ($admin) {
+            foreach ([
+                ['Pengajuan cuti baru', 'Dewi Lestari mengajukan cuti tahunan 3 hari.', 'cuti', false],
+                ['Absensi menunggu persetujuan', '8 absensi hari ini menunggu persetujuan.', 'absensi', false],
+                ['Penggajian siap disetujui', 'Draft penggajian bulan ini sudah dibuat.', 'gaji', true],
+            ] as [$judul, $pesan, $tipe, $read]) {
+                Notifikasi::firstOrCreate(
+                    ['id_pengguna' => $admin->id_pengguna, 'judul' => $judul],
+                    ['pesan' => $pesan, 'tipe' => $tipe, 'is_read' => $read],
+                );
+            }
         }
 
-        Announcement::firstOrCreate(
-            ['judul' => 'Jadwal libur bersama'],
-            ['isi' => 'Libur bersama akan diinformasikan oleh HRD paling lambat satu minggu sebelumnya.', 'dibuat_oleh' => $admin?->id_pengguna, 'tanggal_terbit' => now()->subHour()],
-        );
+        // Dua slip gaji menunggu persetujuan (tbl_penggajian)
+        foreach ($employees->take(2) as $employee) {
+            $payroll = Payroll::firstOrNew([
+                'id_karyawan' => $employee->id_karyawan,
+                'bulan' => (int) $today->format('n'),
+                'tahun' => (int) $today->format('Y'),
+            ]);
 
-        $schedule = Schedule::firstOrCreate(
-            ['judul' => 'Interview Kandidat - Customer Service', 'waktu_mulai' => $today->copy()->setTime(8, 0)],
-            ['tipe' => 'meeting', 'waktu_selesai' => $today->copy()->setTime(10, 0), 'lokasi' => 'Google Meet', 'url_meeting' => 'https://meet.google.com/', 'dibuat_oleh' => $admin?->id_pengguna],
-        );
-        $schedule->attendees()->syncWithoutDetaching($employees->take(3)->pluck('id_karyawan')->all());
-
-        if ($employees->isNotEmpty()) {
-            Task::firstOrCreate(['id_karyawan' => $employees[0]->id_karyawan, 'judul' => 'Rekap absensi mingguan'], ['tenggat' => $today->copy()->addDays(2)->toDateString()]);
+            if (! $payroll->exists) {
+                $payroll->fill([
+                    'gaji_pokok' => 4500000, 'tunjangan' => 500000, 'potongan_absensi' => 0,
+                    'pph21' => 50000, 'bpjs_tk' => 90000, 'bpjs_kes' => 45000, 'status' => 'pending_approval',
+                ]);
+                $payroll->recalculate();
+                $payroll->save();
+            }
         }
     }
 
