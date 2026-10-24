@@ -24,5 +24,10 @@ class DashboardViewTest extends TestCase
         $response->assertSee('Attendance');
         $response->assertSee('Announcement');
         $response->assertSee('Schedule');
+        $response->assertSee('images/DashboardIcon.png');
+        $response->assertSee('images/AbsensiIcon.png');
+        $response->assertSee('images/IzinCutiIcon.png');
+        $response->assertSee('images/Notifications.png');
+        $response->assertSee('images/Calendar.png');
     }
 }
