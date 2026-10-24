@@ -6,33 +6,44 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/** Tabel SDD: tbl_karyawan */
 class Employee extends Model
 {
     use HasFactory;
 
+    protected $table = 'tbl_karyawan';
+
+    protected $primaryKey = 'id_karyawan';
+
     protected $fillable = [
-        'user_id',
-        'department_id',
-        'supervisor_id',
+        'id_pengguna',
+        'id_departemen',
+        'id_atasan',
         'nik',
-        'position',
-        'phone',
-        'address',
-        'gender',
-        'birth_date',
-        'join_date',
-        'employment_status',
-        'photo_path',
-        'bank_name',
-        'bank_account_number',
-        'bank_account_holder',
+        'nama_lengkap',
+        'jabatan',
+        'tanggal_masuk',
+        'no_telepon',
+        'alamat',
+        'jenis_kelamin',
+        'tanggal_lahir',
+        'status_kepegawaian',
+        'gaji_pokok',
+        'sisa_cuti',
+        'status',
+        'dokumen_ktp',
+        'nama_bank',
+        'no_rekening',
+        'nama_pemilik_rekening',
     ];
 
     protected function casts(): array
     {
         return [
-            'birth_date' => 'date',
-            'join_date' => 'date',
+            'tanggal_lahir' => 'date',
+            'tanggal_masuk' => 'date',
+            'gaji_pokok' => 'decimal:2',
+            'sisa_cuti' => 'integer',
         ];
     }
 
@@ -40,71 +51,60 @@ class Employee extends Model
 
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'id_pengguna', 'id_pengguna');
     }
 
     public function department()
     {
-        return $this->belongsTo(Department::class);
+        return $this->belongsTo(Department::class, 'id_departemen', 'id_departemen');
     }
 
     // Atasan langsung (self-referencing)
     public function supervisor()
     {
-        return $this->belongsTo(Employee::class, 'supervisor_id');
+        return $this->belongsTo(Employee::class, 'id_atasan', 'id_karyawan');
     }
 
     // Anak buah / karyawan yang disupervisi
     public function subordinates()
     {
-        return $this->hasMany(Employee::class, 'supervisor_id');
+        return $this->hasMany(Employee::class, 'id_atasan', 'id_karyawan');
     }
 
     public function documents()
     {
-        return $this->hasMany(EmployeeDocument::class);
+        return $this->hasMany(EmployeeDocument::class, 'id_karyawan', 'id_karyawan');
     }
 
     public function attendances()
     {
-        return $this->hasMany(Attendance::class);
+        return $this->hasMany(Attendance::class, 'id_karyawan', 'id_karyawan');
     }
 
     public function locationTrackings()
     {
-        return $this->hasMany(LocationTracking::class);
-    }
-
-    public function leaveQuotas()
-    {
-        return $this->hasMany(LeaveQuota::class);
+        return $this->hasMany(LocationTracking::class, 'id_karyawan', 'id_karyawan');
     }
 
     public function leaveRequests()
     {
-        return $this->hasMany(LeaveRequest::class);
+        return $this->hasMany(LeaveRequest::class, 'id_karyawan', 'id_karyawan');
     }
 
     public function payrolls()
     {
-        return $this->hasMany(Payroll::class);
+        return $this->hasMany(Payroll::class, 'id_karyawan', 'id_karyawan');
     }
 
     // ================= Accessor =================
 
-    // URL foto profil (disk public; jalankan `php artisan storage:link`). Null jika belum ada foto.
+    // URL foto profil (tbl_pengguna.foto_profil, disk public; jalankan `php artisan storage:link`).
     protected function photoUrl(): Attribute
     {
-        return Attribute::get(fn () => $this->photo_path ? asset('storage/'.ltrim($this->photo_path, '/')) : null);
-    }
+        return Attribute::get(function () {
+            $path = $this->user?->foto_profil;
 
-    // ================= Helper =================
-
-    public function leaveQuotaFor(int $leaveTypeId, int $year)
-    {
-        return $this->leaveQuotas()
-            ->where('leave_type_id', $leaveTypeId)
-            ->where('year', $year)
-            ->first();
+            return $path ? asset('storage/'.ltrim($path, '/')) : null;
+        });
     }
 }
