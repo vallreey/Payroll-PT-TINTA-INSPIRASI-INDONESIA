@@ -29,41 +29,41 @@
     </x-slot:heading>
 
     {{-- ================= KARTU STATISTIK ================= --}}
-    <section aria-label="Ringkasan perusahaan" class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+    <section aria-label="Ringkasan perusahaan" class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         @foreach ($stats as $stat)
-            <div class="rounded-2xl bg-white p-5 shadow-card">
+            <div class="rounded-2xl bg-white p-4 shadow-card">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <p class="text-3xl font-semibold tracking-tight text-gray-900">{{ $stat['value'] }}</p>
-                        <p class="mt-1 text-sm text-gray-800">{{ $stat['label'] }}</p>
+                        <p class="text-2xl font-semibold tracking-tight text-gray-900">{{ $stat['value'] }}</p>
+                        <p class="mt-1 text-xs text-gray-800">{{ $stat['label'] }}</p>
                     </div>
-                    <span class="flex size-12 shrink-0 items-center justify-center rounded-full {{ $tones[$stat['tone']] }}">
-                        <x-icon :name="$stat['icon']" size="size-6" />
+                    <span class="flex size-10 shrink-0 items-center justify-center rounded-full {{ $tones[$stat['tone']] }}">
+                        <x-icon :name="$stat['icon']" size="size-5" />
                     </span>
                 </div>
-                <div class="mt-4 flex min-h-8 items-center justify-between gap-2 border-t border-gray-200 pt-3 text-xs text-gray-600">
+                <div class="mt-3 flex min-h-6 items-center justify-between gap-2 border-t border-gray-200 pt-2 text-[10px] text-gray-600">
                     <p class="flex items-center gap-1.5">
                         @if ($stat['caption'])
-                            <x-icon name="arrow-up" size="size-4" class="text-green-500" />
+                            <x-icon name="arrow-up" size="size-3.5" class="text-green-500" />
                             {{ $stat['caption'] }}
                         @endif
                     </p>
                     @if ($stat['route'] && $has($stat['route']))
                         <a href="{{ route($stat['route']) }}" aria-label="Lihat {{ $stat['label'] }}" class="text-gray-400 hover:text-gray-600">
-                            <x-icon name="play" size="size-4" />
+                            <x-icon name="play" size="size-3.5" />
                         </a>
                     @else
-                        <x-icon name="play" size="size-4" class="text-gray-300" />
+                        <x-icon name="play" size="size-3.5" class="text-gray-300" />
                     @endif
                 </div>
             </div>
         @endforeach
     </section>
 
-    <div class="mt-6 grid items-start gap-6 lg:grid-cols-2">
+    <div class="mt-4 grid items-start gap-4 lg:grid-cols-2 lg:gap-3.5">
 
         {{-- ================= ATTENDANCE ================= --}}
-        <section class="rounded-2xl bg-white p-5 shadow-card" aria-labelledby="attendance-heading">
+        <section class="rounded-2xl bg-white p-4 shadow-card" aria-labelledby="attendance-heading">
             <div class="flex items-center justify-between">
                 <h2 id="attendance-heading" class="text-base font-semibold text-gray-900">Attendance</h2>
                 @if ($has('attendance.index'))
@@ -79,7 +79,7 @@
                 @endif
             </div>
 
-            <ul class="mt-5 flex flex-wrap items-center gap-y-2 px-1 text-sm">
+            <ul class="mt-4 flex flex-wrap items-center gap-y-2 px-1 text-xs">
                 <li class="flex items-center gap-2 pr-4">
                     <span class="size-2.5 rounded-full bg-green-500" aria-hidden="true"></span>
                     <strong class="font-semibold">{{ $summary['on_time'] }}</strong>
@@ -104,7 +104,7 @@
                 @endif
             </ul>
 
-            <div class="mt-5 overflow-x-auto rounded-2xl border border-gray-100">
+            <div class="mt-4 overflow-x-auto rounded-2xl border border-gray-100">
                 <table class="w-full text-left text-sm">
                     <thead>
                         <tr class="bg-slate-100 text-gray-900">
@@ -138,7 +138,7 @@
         </section>
 
         {{-- ================= KOLOM KANAN ================= --}}
-        <div class="space-y-6">
+        <div class="space-y-4">
 
             {{-- Announcement / Submission / Task --}}
             <section x-data="{ tab: 'announcement' }" class="rounded-2xl bg-white shadow-card" aria-label="Pengumuman, pengajuan, dan tugas">
@@ -178,7 +178,7 @@
                         </div>
                     </form>
 
-                    <div class="min-h-56">
+                    <div class="min-h-24">
                         @if ($announcements->isNotEmpty())
                             <ul class="mt-4 space-y-4">
                                 @foreach ($announcements as $a)
@@ -190,7 +190,7 @@
                                 @endforeach
                             </ul>
                         @else
-                            <div class="flex min-h-56 flex-col items-center justify-center text-center text-xs text-gray-900">
+                            <div class="flex min-h-24 flex-col items-center justify-center text-center text-xs text-gray-900">
                                 @if ($search !== '' || $period)
                                     <p>No announcement matches your search</p>
                                     <a href="{{ route('dashboard') }}" class="mt-1 font-medium text-blue-600 hover:underline">Reset</a>
@@ -281,12 +281,12 @@
                         @if ($has('schedules.index'))
                             <a href="{{ route('schedules.index') }}" aria-label="Buka kalender"
                                class="flex size-9 items-center justify-center rounded-lg border border-blue-500 text-gray-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-500">
-                                <x-icon name="calendar" size="size-4" />
+                                <img src="{{ asset('images/Calendar.png') }}" alt="" aria-hidden="true" class="size-4">
                             </a>
                         @else
                             <span aria-disabled="true" title="Kalender belum tersedia"
                                   class="flex size-9 cursor-not-allowed items-center justify-center rounded-lg border border-blue-200 text-gray-400">
-                                <x-icon name="calendar" size="size-4" />
+                                <img src="{{ asset('images/Calendar.png') }}" alt="" aria-hidden="true" class="size-4">
                             </span>
                         @endif
                     </div>
