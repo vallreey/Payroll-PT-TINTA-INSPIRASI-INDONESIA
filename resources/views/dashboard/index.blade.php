@@ -1,6 +1,5 @@
 @php
     use Illuminate\Support\Facades\Route as RouteFacade;
-    use Illuminate\Support\Str;
 
     // Badge status absensi (class ditulis utuh agar terdeteksi Tailwind)
     $badges = [
@@ -17,14 +16,13 @@
         'green'  => 'bg-green-100 text-green-600',
     ];
 
-    $safeUrl = fn ($url) => is_string($url) && Str::startsWith($url, ['https://', 'http://']);
     $has = fn (string $name) => RouteFacade::has($name);
 @endphp
 
 <x-app-layout title="Dashboard">
 
     <x-slot:heading>
-        <h1 class="text-xl font-semibold text-gray-900 sm:text-2xl">Selamat {{ $greeting }}, {{ $user->name }} <span aria-hidden="true">👋</span></h1>
+        <h1 class="break-words text-xl font-semibold text-gray-900 sm:text-2xl">Selamat {{ $greeting }}, {{ $user->nama_tampil }} <span aria-hidden="true">👋</span></h1>
         <p class="mt-0.5 text-xs text-gray-700">Hari ini {{ $dateLabel }}.</p>
     </x-slot:heading>
 
@@ -41,11 +39,13 @@
                         <x-icon :name="$stat['icon']" size="size-6" />
                     </span>
                 </div>
-                <div class="mt-4 flex min-h-8 items-center justify-between gap-2 border-t border-gray-200 pt-3 text-xs text-gray-600">
-                    <p class="flex items-center gap-1.5">
+                <div class="mt-4 flex min-h-8 items-center justify-between gap-2 border-t border-gray-200 pt-3 text-[11px] text-gray-600">
+                    <p class="flex items-center gap-1.5 whitespace-nowrap">
                         @if ($stat['caption'])
-                            <x-icon name="arrow-up" size="size-4" class="text-green-500" />
-                            {{ $stat['caption'] }}
+                            @if ($stat['caption']['trend'])
+                                <x-icon name="arrow-up" size="size-4" class="text-green-500" />
+                            @endif
+                            {{ $stat['caption']['text'] }}
                         @endif
                     </p>
                     @if ($stat['route'] && $has($stat['route']))
@@ -60,10 +60,10 @@
         @endforeach
     </section>
 
-    <div class="mt-6 grid items-start gap-6 lg:grid-cols-2">
+    <div class="mt-6 grid items-start gap-6 xl:grid-cols-[1.15fr_1fr]">
 
         {{-- ================= ATTENDANCE ================= --}}
-        <section class="rounded-2xl bg-white p-5 shadow-card" aria-labelledby="attendance-heading">
+        <section class="min-w-0 rounded-2xl bg-white p-5 shadow-card" aria-labelledby="attendance-heading">
             <div class="flex items-center justify-between">
                 <h2 id="attendance-heading" class="text-base font-semibold text-gray-900">Attendance</h2>
                 @if ($has('attendance.index'))
@@ -79,24 +79,24 @@
                 @endif
             </div>
 
-            <ul class="mt-5 flex flex-wrap items-center gap-y-2 px-1 text-sm">
-                <li class="flex items-center gap-2 pr-4">
+            <ul class="mt-5 flex flex-wrap items-center gap-y-2 text-sm">
+                <li class="flex items-center gap-2 pr-3">
                     <span class="size-2.5 rounded-full bg-green-500" aria-hidden="true"></span>
                     <strong class="font-semibold">{{ $summary['on_time'] }}</strong>
                     <span class="font-medium text-gray-400">On-Time</span>
                 </li>
-                <li class="flex items-center gap-2 border-l border-gray-200 px-4">
+                <li class="flex items-center gap-2 border-l border-gray-200 px-3">
                     <span class="size-2.5 rounded-full bg-red-600" aria-hidden="true"></span>
                     <strong class="font-semibold">{{ $summary['late'] }}</strong>
                     <span class="font-medium text-gray-400">Late</span>
                 </li>
-                <li class="flex items-center gap-2 border-l border-gray-200 px-4">
+                <li class="flex items-center gap-2 border-l border-gray-200 px-3">
                     <span class="size-2.5 rounded-full bg-amber-400" aria-hidden="true"></span>
                     <strong class="font-semibold">{{ $summary['absent'] }}</strong>
                     <span class="font-medium text-gray-400">Absent</span>
                 </li>
                 @if ($summary['leave'] > 0)
-                    <li class="flex items-center gap-2 border-l border-gray-200 pl-4">
+                    <li class="flex items-center gap-2 border-l border-gray-200 pl-3">
                         <span class="size-2.5 rounded-full bg-sky-400" aria-hidden="true"></span>
                         <strong class="font-semibold">{{ $summary['leave'] }}</strong>
                         <span class="font-medium text-gray-400">On Leave</span>
@@ -105,27 +105,27 @@
             </ul>
 
             <div class="mt-5 overflow-x-auto rounded-2xl border border-gray-100">
-                <table class="w-full text-left text-sm">
+                <table class="w-full min-w-[320px] text-left text-sm">
                     <thead>
                         <tr class="bg-slate-100 text-gray-900">
-                            <th scope="col" class="rounded-tl-2xl px-5 py-3 font-medium">Employee Name</th>
-                            <th scope="col" class="px-5 py-3 font-medium">Status</th>
-                            <th scope="col" class="rounded-tr-2xl px-5 py-3 font-medium">Check-in</th>
+                            <th scope="col" class="rounded-tl-2xl px-2 py-3 font-medium whitespace-nowrap sm:px-4">Employee Name</th>
+                            <th scope="col" class="px-2 py-3 font-medium whitespace-nowrap sm:px-4">Status</th>
+                            <th scope="col" class="rounded-tr-2xl px-2 py-3 font-medium whitespace-nowrap sm:px-4">Check-in</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         @forelse ($rows as $row)
                             <tr>
-                                <td class="px-5 py-3">
+                                <td class="px-2 py-3 sm:px-4">
                                     <div class="flex items-center gap-3">
-                                        <x-avatar :name="$row['name']" :photo="$row['photo']" size="size-10" />
+                                        <span class="hidden sm:inline-flex"><x-avatar :name="$row['name']" :photo="$row['photo']" size="size-10" /></span>
                                         <span class="font-normal text-gray-900">{{ $row['name'] }}</span>
                                     </div>
                                 </td>
-                                <td class="px-5 py-3">
-                                    <span class="inline-flex rounded-md border px-3 py-1 text-xs font-medium {{ $badges[$row['status']][1] }}">{{ $badges[$row['status']][0] }}</span>
+                                <td class="px-2 py-3 sm:px-4">
+                                    <span class="inline-flex whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium sm:px-3 {{ $badges[$row['status']][1] }}">{{ $badges[$row['status']][0] }}</span>
                                 </td>
-                                <td class="px-5 py-3 tabular-nums text-gray-900">{{ $row['check_in'] ?? '-' }}</td>
+                                <td class="whitespace-nowrap px-2 py-3 tabular-nums text-gray-900 sm:px-4">{{ $row['check_in'] ?? '-' }}</td>
                             </tr>
                         @empty
                             <tr>
@@ -138,87 +138,83 @@
         </section>
 
         {{-- ================= KOLOM KANAN ================= --}}
-        <div class="space-y-6">
+        <div class="min-w-0 space-y-6">
 
-            {{-- Announcement / Submission / Task --}}
-            <section x-data="{ tab: 'announcement' }" class="rounded-2xl bg-white shadow-card" aria-label="Pengumuman, pengajuan, dan tugas">
+            {{-- Notification / Submission / Approval --}}
+            <section x-data="{ tab: 'notification' }" class="rounded-2xl bg-white shadow-card" aria-label="Notifikasi, pengajuan, dan persetujuan">
                 <div role="tablist" class="flex gap-6 border-b border-gray-200 px-5 pt-5">
-                    @foreach (['announcement' => 'Announcement', 'submission' => 'Submission', 'task' => 'Task'] as $key => $label)
+                    @foreach (['notification' => 'Notification', 'submission' => 'Submission', 'approval' => 'Approval'] as $key => $label)
+                        @php
+                            $badge = match ($key) {
+                                'notification' => $unreadTotal,
+                                'submission' => $pendingLeaveTotal,
+                                default => $approvalTotal,
+                            };
+                        @endphp
                         <button type="button" role="tab" id="tab-{{ $key }}" aria-controls="panel-{{ $key }}"
                                 :aria-selected="(tab === '{{ $key }}').toString()"
                                 @click="tab = '{{ $key }}'"
                                 :class="tab === '{{ $key }}' ? 'border-blue-500 text-gray-900' : 'border-transparent text-gray-400 hover:text-gray-700'"
                                 class="-mb-px flex items-center gap-1.5 border-b-4 pb-2.5 text-xs font-medium focus-visible:outline-2 focus-visible:outline-blue-500">
                             {{ $label }}
-                            @if ($key === 'submission' && $pendingTotal > 0)
-                                <span class="rounded-full bg-blue-600 px-1.5 text-[11px] font-semibold leading-5 text-white">{{ $pendingTotal }}</span>
+                            @if ($badge > 0)
+                                <span class="rounded-full bg-blue-600 px-1.5 text-[11px] font-semibold leading-5 text-white">{{ $badge }}</span>
                             @endif
                         </button>
                     @endforeach
                 </div>
 
-                {{-- Announcement --}}
-                <div role="tabpanel" id="panel-announcement" aria-labelledby="tab-announcement" x-show="tab === 'announcement'" class="p-5">
-                    <form method="GET" action="{{ route('dashboard') }}" role="search" class="flex gap-3">
+                {{-- Notification (tbl_notifikasi milik user yang login) --}}
+                <div role="tabpanel" id="panel-notification" aria-labelledby="tab-notification" x-show="tab === 'notification'" class="p-5">
+                    <form method="GET" action="{{ route('dashboard') }}" role="search" class="flex flex-col gap-3 sm:flex-row">
                         <div class="relative min-w-0 flex-1">
-                            <label for="announcement-search" class="sr-only">Cari pengumuman</label>
+                            <label for="notification-search" class="sr-only">Cari notifikasi</label>
                             <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-500"><x-icon name="search" size="size-4" /></span>
-                            <input id="announcement-search" type="search" name="q" value="{{ $search }}" maxlength="100" placeholder="Search"
+                            <input id="notification-search" type="search" name="q" value="{{ $search }}" maxlength="100" placeholder="Search"
                                    class="w-full rounded-md border border-gray-300 py-2.5 pl-9 pr-3 text-xs text-gray-700 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                         </div>
-                        <div class="relative w-36 shrink-0">
-                            <label for="announcement-period" class="sr-only">Filter periode</label>
-                            <select id="announcement-period" name="period" @change="$el.form.requestSubmit()"
+                        <div class="relative w-full shrink-0 sm:w-36">
+                            <label for="notification-type" class="sr-only">Filter jenis notifikasi</label>
+                            <select id="notification-type" name="tipe" @change="$el.form.requestSubmit()"
                                     class="w-full appearance-none rounded-md border border-gray-300 bg-white py-2.5 pl-3 pr-9 text-xs text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                                 <option value="">Filter</option>
-                                <option value="week" @selected($period === 'week')>This week</option>
-                                <option value="month" @selected($period === 'month')>This month</option>
+                                @foreach (['izin' => 'Izin', 'cuti' => 'Cuti', 'absensi' => 'Absensi', 'gaji' => 'Gaji'] as $value => $label)
+                                    <option value="{{ $value }}" @selected($tipe === $value)>{{ $label }}</option>
+                                @endforeach
                             </select>
                             <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-500"><x-icon name="chevron-down" size="size-4" /></span>
                         </div>
                     </form>
 
                     <div class="min-h-56">
-                        @if ($announcements->isNotEmpty())
-                            <ul class="mt-4 space-y-4">
-                                @foreach ($announcements as $a)
-                                    <li>
-                                        <p class="text-sm font-medium text-gray-900">{{ $a->title }}</p>
-                                        <p class="mt-0.5 line-clamp-2 text-xs text-gray-600">{{ $a->body }}</p>
-                                        <p class="mt-1 text-[11px] text-gray-400">{{ $a->published_at->locale('id')->translatedFormat('j F Y') }}</p>
+                        @if ($notifications->isNotEmpty())
+                            <ul class="mt-4 divide-y divide-gray-100">
+                                @foreach ($notifications as $n)
+                                    <li class="flex gap-3 py-3 first:pt-0 last:pb-0">
+                                        <span class="mt-1.5 size-2 shrink-0 rounded-full {{ $n->is_read ? 'bg-gray-200' : 'bg-blue-500' }}" aria-hidden="true"></span>
+                                        <div class="min-w-0">
+                                            <p class="text-sm {{ $n->is_read ? 'font-normal text-gray-700' : 'font-medium text-gray-900' }}">
+                                                {{ $n->judul }}
+                                                @unless ($n->is_read)<span class="sr-only">(belum dibaca)</span>@endunless
+                                            </p>
+                                            <p class="mt-0.5 line-clamp-2 text-xs text-gray-600">{{ $n->pesan }}</p>
+                                            <p class="mt-1 text-[11px] text-gray-400">{{ ucfirst($n->tipe) }}, {{ $n->created_at->locale('id')->diffForHumans() }}</p>
+                                        </div>
                                     </li>
                                 @endforeach
                             </ul>
                         @else
                             <div class="flex min-h-56 flex-col items-center justify-center text-center text-xs text-gray-900">
-                                @if ($search !== '' || $period)
-                                    <p>No announcement matches your search</p>
+                                @if ($search !== '' || $tipe)
+                                    <p>No notification matches your search</p>
                                     <a href="{{ route('dashboard') }}" class="mt-1 font-medium text-blue-600 hover:underline">Reset</a>
                                 @else
-                                    <p>There is no announcement</p>
+                                    <p>There is no notification</p>
                                     <p class="mt-2">at this time</p>
                                 @endif
                             </div>
                         @endif
                     </div>
-
-                    @if ($canAnnounce)
-                        <div class="mt-4 flex justify-end">
-                            @if ($has('announcements.create'))
-                                <a href="{{ route('announcements.create') }}"
-                                   class="flex items-center gap-3 rounded-full bg-sky-100 py-1.5 pl-1.5 pr-5 text-[11px] text-gray-800 shadow-md hover:bg-sky-200 focus-visible:outline-2 focus-visible:outline-blue-500">
-                                    <span class="flex size-8 items-center justify-center rounded-full bg-blue-500 text-white"><x-icon name="plus" size="size-4" /></span>
-                                    Add Announcement
-                                </a>
-                            @else
-                                <button type="button" disabled aria-disabled="true" title="Form pengumuman belum tersedia"
-                                        class="flex cursor-not-allowed items-center gap-3 rounded-full bg-sky-100 py-1.5 pl-1.5 pr-5 text-[11px] text-gray-500 shadow-md">
-                                    <span class="flex size-8 items-center justify-center rounded-full bg-blue-400 text-white"><x-icon name="plus" size="size-4" /></span>
-                                    Add Announcement
-                                </button>
-                            @endif
-                        </div>
-                    @endif
                 </div>
 
                 {{-- Submission: pengajuan izin/cuti yang menunggu persetujuan --}}
@@ -227,65 +223,66 @@
                         <ul class="divide-y divide-gray-100">
                             @foreach ($submissions as $s)
                                 <li class="py-3 first:pt-0 last:pb-0">
-                                    <p class="text-sm font-medium text-gray-900">{{ $s->employee?->user?->name ?? '-' }}</p>
+                                    <p class="text-sm font-medium text-gray-900">{{ $s->employee?->nama_lengkap ?? '-' }}</p>
                                     <p class="text-xs text-gray-500">
-                                        {{ $s->leaveType?->name }},
-                                        {{ $s->start_date->locale('id')->translatedFormat('j M') }}
-                                        @if (! $s->start_date->isSameDay($s->end_date))
-                                            – {{ $s->end_date->locale('id')->translatedFormat('j M') }}
+                                        {{ ucfirst($s->jenis) }}@if ($s->sub_jenis) ({{ $s->sub_jenis }})@endif,
+                                        {{ $s->tanggal_mulai->locale('id')->translatedFormat('j M') }}
+                                        @if (! $s->tanggal_mulai->isSameDay($s->tanggal_selesai))
+                                            – {{ $s->tanggal_selesai->locale('id')->translatedFormat('j M') }}
                                         @endif
                                     </p>
                                 </li>
                             @endforeach
                         </ul>
-                        @if ($pendingTotal > $submissions->count())
-                            <p class="mt-3 text-xs text-gray-400">+{{ $pendingTotal - $submissions->count() }} pengajuan lainnya menunggu persetujuan.</p>
+                        @if ($pendingLeaveTotal > $submissions->count())
+                            <p class="mt-3 text-xs text-gray-400">+{{ $pendingLeaveTotal - $submissions->count() }} pengajuan lainnya menunggu persetujuan.</p>
                         @endif
                     @else
                         <p class="pt-24 text-center text-xs text-gray-900">There is no submission at this time</p>
                     @endif
                 </div>
 
-                {{-- Task --}}
-                <div role="tabpanel" id="panel-task" aria-labelledby="tab-task" x-cloak x-show="tab === 'task'" class="min-h-72 p-5">
-                    @if ($tasks->isNotEmpty())
+                {{-- Approval: absensi dan penggajian yang menunggu persetujuan --}}
+                <div role="tabpanel" id="panel-approval" aria-labelledby="tab-approval" x-cloak x-show="tab === 'approval'" class="min-h-72 p-5">
+                    @if ($approvals->isNotEmpty())
                         <ul class="divide-y divide-gray-100">
-                            @foreach ($tasks as $t)
+                            @foreach ($approvals as $a)
                                 <li class="py-3 first:pt-0 last:pb-0">
-                                    <p class="text-sm font-medium text-gray-900">{{ $t->title }}</p>
-                                    @if ($t->due_date)
-                                        <p class="text-xs text-gray-500">Tenggat {{ $t->due_date->locale('id')->translatedFormat('j F Y') }}</p>
-                                    @endif
+                                    <p class="text-sm font-medium text-gray-900">{{ $a['title'] }}</p>
+                                    <p class="text-xs text-gray-500">{{ $a['subtitle'] }}</p>
                                 </li>
                             @endforeach
                         </ul>
+                        @if ($approvalTotal > $approvals->count())
+                            <p class="mt-3 text-xs text-gray-400">+{{ $approvalTotal - $approvals->count() }} persetujuan lainnya.</p>
+                        @endif
                     @else
-                        <p class="pt-24 text-center text-xs text-gray-900">There is no task at this time</p>
+                        <p class="pt-24 text-center text-xs text-gray-900">There is no approval at this time</p>
                     @endif
                 </div>
             </section>
 
-            {{-- Schedule --}}
+            {{-- Leave Schedule: izin/cuti/sakit yang disetujui dan belum berakhir --}}
             <section x-data="{ filter: 'all' }" class="rounded-2xl bg-white p-5 shadow-card" aria-labelledby="schedule-heading">
-                <div class="flex flex-wrap items-center justify-between gap-3">
-                    <h2 id="schedule-heading" class="text-base font-semibold text-gray-900">Schedule ({{ $scheduleTotal }})</h2>
+                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
+                    <h2 id="schedule-heading" class="text-base font-semibold text-gray-900">Leave Schedule ({{ $scheduleTotal }})</h2>
                     <div class="flex items-center gap-3">
-                        <div class="flex rounded-xl bg-sky-100 p-0.5 text-sm" role="group" aria-label="Filter jadwal">
-                            @foreach (['all' => 'All', 'meeting' => 'Meetings', 'event' => 'Event'] as $key => $label)
+                        <div class="flex rounded-xl bg-sky-100 p-0.5 text-sm" role="group" aria-label="Filter jenis">
+                            @foreach (['all' => 'All', 'cuti' => 'Cuti', 'izin' => 'Izin', 'sakit' => 'Sakit'] as $key => $label)
                                 <button type="button" @click="filter = '{{ $key }}'"
                                         :aria-pressed="(filter === '{{ $key }}').toString()"
                                         :class="filter === '{{ $key }}' ? 'bg-gradient-to-r from-cyan-500 to-indigo-700 text-white' : 'text-gray-800 hover:bg-sky-200'"
-                                        class="rounded-[10px] px-4 py-1.5 font-normal focus-visible:outline-2 focus-visible:outline-blue-500">{{ $label }}</button>
+                                        class="rounded-[10px] px-3.5 py-1.5 font-normal focus-visible:outline-2 focus-visible:outline-blue-500">{{ $label }}</button>
                             @endforeach
                         </div>
-                        @if ($has('schedules.index'))
-                            <a href="{{ route('schedules.index') }}" aria-label="Buka kalender"
+                        @if ($has('leaves.index'))
+                            <a href="{{ route('leaves.index') }}" aria-label="Buka halaman izin dan cuti"
                                class="flex size-9 items-center justify-center rounded-lg border border-blue-500 text-gray-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-500">
                                 <x-icon name="calendar" size="size-4" />
                             </a>
                         @else
-                            <span aria-disabled="true" title="Kalender belum tersedia"
-                                  class="flex size-9 cursor-not-allowed items-center justify-center rounded-lg border border-blue-200 text-gray-400">
+                            <span aria-disabled="true" title="Halaman izin dan cuti belum tersedia"
+                                  class="flex size-9 cursor-default items-center justify-center rounded-lg border border-blue-200 text-gray-400">
                                 <x-icon name="calendar" size="size-4" />
                             </span>
                         @endif
@@ -295,47 +292,29 @@
                 @if ($schedules->isNotEmpty())
                     <ul class="mt-5 space-y-4">
                         @foreach ($schedules as $e)
-                            @php $extra = $e->attendees->count() - 3; @endphp
-                            <li x-show="filter === 'all' || filter === '{{ $e->type }}'"
+                            <li x-show="filter === 'all' || filter === '{{ $e->jenis }}'"
                                 class="flex items-center justify-between gap-3 rounded-xl border border-blue-600 p-4">
                                 <div class="min-w-0">
                                     <p class="flex items-center gap-2 text-xs font-medium text-gray-900">
-                                        <x-icon :name="$e->type === 'meeting' ? 'employees' : 'calendar'" size="size-4" />
-                                        <span class="truncate">{{ $e->title }}</span>
+                                        <x-icon name="calendar" size="size-4" />
+                                        <span class="truncate">{{ $e->employee?->nama_lengkap ?? '-' }}, {{ ucfirst($e->jenis) }}@if ($e->sub_jenis) ({{ $e->sub_jenis }})@endif</span>
                                     </p>
                                     <p class="mt-2 flex flex-wrap items-center gap-x-2 text-[11px] text-gray-500">
-                                        <span>{{ $e->start_at->locale('id')->translatedFormat('j F, Y') }}</span>
-                                        <span class="size-2 rounded-full bg-gray-300" aria-hidden="true"></span>
-                                        <span class="tabular-nums">{{ $e->start_at->format('H.i') }} - {{ $e->end_at->format('H.i') }}</span>
-                                    </p>
-                                    @if ($e->location)
-                                        <p class="mt-2 flex items-center gap-2 text-[11px] text-gray-900">
-                                            <x-icon name="video" size="size-4" class="text-blue-600" />
-                                            {{ $e->location }}
-                                            @if ($safeUrl($e->meeting_url))
-                                                <a href="{{ $e->meeting_url }}" target="_blank" rel="noopener noreferrer"
-                                                   aria-label="Buka tautan {{ $e->title }}" class="hover:text-blue-600">
-                                                    <x-icon name="arrow-right" size="size-4" />
-                                                </a>
-                                            @endif
-                                        </p>
-                                    @endif
-                                </div>
-                                @if ($e->attendees->isNotEmpty())
-                                    <div class="flex shrink-0 -space-x-3" aria-label="{{ $e->attendees->count() }} peserta">
-                                        @foreach ($e->attendees->take(3) as $p)
-                                            <x-avatar :name="$p->user?->name ?? ''" :photo="$p->photo_url" size="size-10" class="border border-blue-600 bg-white" />
-                                        @endforeach
-                                        @if ($extra > 0)
-                                            <span class="flex size-10 items-center justify-center rounded-full border border-blue-600 bg-blue-50 text-xs font-medium text-blue-700">+{{ $extra }}</span>
+                                        <span>{{ $e->tanggal_mulai->locale('id')->translatedFormat('j F, Y') }}</span>
+                                        @if (! $e->tanggal_mulai->isSameDay($e->tanggal_selesai))
+                                            <span aria-hidden="true">–</span>
+                                            <span>{{ $e->tanggal_selesai->locale('id')->translatedFormat('j F, Y') }}</span>
                                         @endif
-                                    </div>
-                                @endif
+                                        <span class="size-2 rounded-full bg-gray-300" aria-hidden="true"></span>
+                                        <span>{{ $e->total_hari }} hari</span>
+                                    </p>
+                                </div>
+                                <x-avatar :name="$e->employee?->nama_lengkap ?? ''" :photo="$e->employee?->photo_url" size="size-10" class="border border-blue-600" />
                             </li>
                         @endforeach
                     </ul>
                 @else
-                    <p class="py-12 text-center text-xs text-gray-900">There is no schedule at this time</p>
+                    <p class="py-12 text-center text-xs text-gray-900">There is no leave schedule at this time</p>
                 @endif
             </section>
         </div>

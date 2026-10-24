@@ -2,36 +2,33 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use App\Models\Department;
-use App\Models\LeaveType;
+use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
+/**
+ * Data awal WAJIB untuk production. Aman dijalankan berulang (idempotent):
+ * php artisan db:seed --class=PayrollSystemSeeder
+ */
 class PayrollSystemSeeder extends Seeder
 {
     public function run(): void
     {
-        // Jenis cuti/izin dasar
-        LeaveType::insert([
-            ['name' => 'Cuti Tahunan', 'default_quota' => 12, 'requires_attachment' => false, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Izin', 'default_quota' => 0, 'requires_attachment' => false, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Sakit', 'default_quota' => 0, 'requires_attachment' => true, 'created_at' => now(), 'updated_at' => now()],
-        ]);
+        Department::firstOrCreate(['nama_departemen' => 'General']);
 
-        // Departemen contoh
-        Department::create(['name' => 'General']);
-
-        // Akun Super Admin awal — WAJIB, karena semua registrasi karyawan
-        // butuh persetujuan Super Admin (tanpa akun ini tidak ada yang bisa approve).
-        // Ganti email & password setelah login pertama kali.
-        User::create([
-            'name' => 'Super Admin',
-            'email' => 'superadmin@tintainspirasi.co.id',
-            'password' => Hash::make('ChangeMe123!'),
+        // Akun Super Admin awal — WAJIB, karena semua registrasi karyawan butuh persetujuan
+        // Super Admin. Ganti email & password setelah login pertama kali.
+        // Password hanya di-set saat akun dibuat; seeder ulang tidak menimpa password yang sudah diganti.
+        $admin = User::firstOrNew(['email' => 'superadmin@tintainspirasi.co.id']);
+        if (! $admin->exists) {
+            $admin->password = 'ChangeMe123!'; // di-hash otomatis oleh cast 'hashed'
+        }
+        $admin->fill([
+            'username' => 'superadmin',
             'role' => 'super_admin',
-            'status' => 'approved',
-            'approved_at' => now(),
-        ]);
+            'status' => 'aktif',
+            'status_persetujuan' => 'approved',
+            'approved_at' => $admin->approved_at ?? now(),
+        ])->save();
     }
 }

@@ -5,15 +5,24 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/** Tabel SDD: tbl_tracking_lokasi (hanya created_at) */
 class LocationTracking extends Model
 {
     use HasFactory;
 
+    public const UPDATED_AT = null;
+
+    protected $table = 'tbl_tracking_lokasi';
+
+    protected $primaryKey = 'id_tracking';
+
     protected $fillable = [
-        'employee_id',
+        'id_karyawan',
+        'tanggal',
+        'waktu',
         'latitude',
         'longitude',
-        'recorded_at',
+        'keterangan',
     ];
 
     protected function casts(): array
@@ -21,12 +30,11 @@ class LocationTracking extends Model
         return [
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
-            'recorded_at' => 'datetime',
         ];
     }
 
     public function employee()
     {
-        return $this->belongsTo(Employee::class);
+        return $this->belongsTo(Employee::class, 'id_karyawan', 'id_karyawan');
     }
 }
