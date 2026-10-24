@@ -97,7 +97,7 @@
                         class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white text-blue-600 shadow-card focus-visible:outline-2 focus-visible:outline-blue-500">
                     <x-icon name="panel" />
                 </button>
-                <div class="min-w-0 pt-1">{{ $heading ?? '' }}</div>
+                <div class="min-w-0 flex-1 pt-1">{{ $heading ?? '' }}</div>
             </div>
 
             <div class="flex shrink-0 items-center gap-3">
@@ -136,7 +136,7 @@
             </div>
         </header>
 
-        <main class="px-4 pb-8 pt-6 sm:px-6 lg:px-8">
+        <main class="mx-auto w-full max-w-[1600px] px-4 pb-8 pt-6 sm:px-6 lg:px-8">
             {{ $slot }}
         </main>
     </div>

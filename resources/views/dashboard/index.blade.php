@@ -22,7 +22,7 @@
 <x-app-layout title="Dashboard">
 
     <x-slot:heading>
-        <h1 class="text-xl font-semibold text-gray-900 sm:text-2xl">Selamat {{ $greeting }}, {{ $user->nama_tampil }} <span aria-hidden="true">👋</span></h1>
+        <h1 class="break-words text-xl font-semibold text-gray-900 sm:text-2xl">Selamat {{ $greeting }}, {{ $user->nama_tampil }} <span aria-hidden="true">👋</span></h1>
         <p class="mt-0.5 text-xs text-gray-700">Hari ini {{ $dateLabel }}.</p>
     </x-slot:heading>
 
@@ -60,10 +60,10 @@
         @endforeach
     </section>
 
-    <div class="mt-6 grid items-start gap-6 lg:grid-cols-[1.15fr_1fr]">
+    <div class="mt-6 grid items-start gap-6 xl:grid-cols-[1.15fr_1fr]">
 
         {{-- ================= ATTENDANCE ================= --}}
-        <section class="rounded-2xl bg-white p-5 shadow-card" aria-labelledby="attendance-heading">
+        <section class="min-w-0 rounded-2xl bg-white p-5 shadow-card" aria-labelledby="attendance-heading">
             <div class="flex items-center justify-between">
                 <h2 id="attendance-heading" class="text-base font-semibold text-gray-900">Attendance</h2>
                 @if ($has('attendance.index'))
@@ -105,27 +105,27 @@
             </ul>
 
             <div class="mt-5 overflow-x-auto rounded-2xl border border-gray-100">
-                <table class="w-full text-left text-sm">
+                <table class="w-full min-w-[320px] text-left text-sm">
                     <thead>
                         <tr class="bg-slate-100 text-gray-900">
-                            <th scope="col" class="rounded-tl-2xl px-4 py-3 font-medium whitespace-nowrap">Employee Name</th>
-                            <th scope="col" class="px-4 py-3 font-medium whitespace-nowrap">Status</th>
-                            <th scope="col" class="rounded-tr-2xl px-4 py-3 font-medium whitespace-nowrap">Check-in</th>
+                            <th scope="col" class="rounded-tl-2xl px-2 py-3 font-medium whitespace-nowrap sm:px-4">Employee Name</th>
+                            <th scope="col" class="px-2 py-3 font-medium whitespace-nowrap sm:px-4">Status</th>
+                            <th scope="col" class="rounded-tr-2xl px-2 py-3 font-medium whitespace-nowrap sm:px-4">Check-in</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         @forelse ($rows as $row)
                             <tr>
-                                <td class="px-4 py-3">
+                                <td class="px-2 py-3 sm:px-4">
                                     <div class="flex items-center gap-3">
-                                        <x-avatar :name="$row['name']" :photo="$row['photo']" size="size-10" />
+                                        <span class="hidden sm:inline-flex"><x-avatar :name="$row['name']" :photo="$row['photo']" size="size-10" /></span>
                                         <span class="font-normal text-gray-900">{{ $row['name'] }}</span>
                                     </div>
                                 </td>
-                                <td class="px-4 py-3">
-                                    <span class="inline-flex whitespace-nowrap rounded-md border px-3 py-1 text-xs font-medium {{ $badges[$row['status']][1] }}">{{ $badges[$row['status']][0] }}</span>
+                                <td class="px-2 py-3 sm:px-4">
+                                    <span class="inline-flex whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium sm:px-3 {{ $badges[$row['status']][1] }}">{{ $badges[$row['status']][0] }}</span>
                                 </td>
-                                <td class="whitespace-nowrap px-4 py-3 tabular-nums text-gray-900">{{ $row['check_in'] ?? '-' }}</td>
+                                <td class="whitespace-nowrap px-2 py-3 tabular-nums text-gray-900 sm:px-4">{{ $row['check_in'] ?? '-' }}</td>
                             </tr>
                         @empty
                             <tr>
@@ -138,7 +138,7 @@
         </section>
 
         {{-- ================= KOLOM KANAN ================= --}}
-        <div class="space-y-6">
+        <div class="min-w-0 space-y-6">
 
             {{-- Notification / Submission / Approval --}}
             <section x-data="{ tab: 'notification' }" class="rounded-2xl bg-white shadow-card" aria-label="Notifikasi, pengajuan, dan persetujuan">
@@ -166,14 +166,14 @@
 
                 {{-- Notification (tbl_notifikasi milik user yang login) --}}
                 <div role="tabpanel" id="panel-notification" aria-labelledby="tab-notification" x-show="tab === 'notification'" class="p-5">
-                    <form method="GET" action="{{ route('dashboard') }}" role="search" class="flex gap-3">
+                    <form method="GET" action="{{ route('dashboard') }}" role="search" class="flex flex-col gap-3 sm:flex-row">
                         <div class="relative min-w-0 flex-1">
                             <label for="notification-search" class="sr-only">Cari notifikasi</label>
                             <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-500"><x-icon name="search" size="size-4" /></span>
                             <input id="notification-search" type="search" name="q" value="{{ $search }}" maxlength="100" placeholder="Search"
                                    class="w-full rounded-md border border-gray-300 py-2.5 pl-9 pr-3 text-xs text-gray-700 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                         </div>
-                        <div class="relative w-36 shrink-0">
+                        <div class="relative w-full shrink-0 sm:w-36">
                             <label for="notification-type" class="sr-only">Filter jenis notifikasi</label>
                             <select id="notification-type" name="tipe" @change="$el.form.requestSubmit()"
                                     class="w-full appearance-none rounded-md border border-gray-300 bg-white py-2.5 pl-3 pr-9 text-xs text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
@@ -264,7 +264,7 @@
 
             {{-- Leave Schedule: izin/cuti/sakit yang disetujui dan belum berakhir --}}
             <section x-data="{ filter: 'all' }" class="rounded-2xl bg-white p-5 shadow-card" aria-labelledby="schedule-heading">
-                <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-3">
                     <h2 id="schedule-heading" class="text-base font-semibold text-gray-900">Leave Schedule ({{ $scheduleTotal }})</h2>
                     <div class="flex items-center gap-3">
                         <div class="flex rounded-xl bg-sky-100 p-0.5 text-sm" role="group" aria-label="Filter jenis">
