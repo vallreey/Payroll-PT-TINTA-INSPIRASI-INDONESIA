@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -87,6 +88,14 @@ class Employee extends Model
     public function payrolls()
     {
         return $this->hasMany(Payroll::class);
+    }
+
+    // ================= Accessor =================
+
+    // URL foto profil (disk public; jalankan `php artisan storage:link`). Null jika belum ada foto.
+    protected function photoUrl(): Attribute
+    {
+        return Attribute::get(fn () => $this->photo_path ? asset('storage/'.ltrim($this->photo_path, '/')) : null);
     }
 
     // ================= Helper =================

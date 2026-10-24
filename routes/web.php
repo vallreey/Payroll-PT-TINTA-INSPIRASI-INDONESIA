@@ -3,10 +3,10 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredEmployeeController;
-use App\Http\Controllers\Admin\UserApprovalController;
+use App\Http\Controllers\DashboardController;
 
 Route::get('/', function () {
-    return view('welcome');
+    return redirect()->route('login');
 });
 // ---------- Guest routes (belum login) ----------
 Route::middleware('guest')->group(function () {
@@ -33,16 +33,11 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
-    // Placeholder dashboard — nanti diarahkan sesuai role (Karyawan/HRD/Supervisor/dst)
-    Route::get('/dashboard', function () {
-        return view('dashboard');
-    })->name('dashboard');
+    // Dashboard — tampilan menyesuaikan role (lihat DashboardController)
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
-    // ---------- Admin: persetujuan pendaftaran akun karyawan ----------
-    Route::middleware('role:super_admin')->prefix('admin')->name('admin.')->group(function () {
-        Route::get('/user-approvals', [UserApprovalController::class, 'index'])->name('user-approvals.index');
-        Route::patch('/user-approvals/{user}/approve', [UserApprovalController::class, 'approve'])->name('user-approvals.approve');
-        Route::patch('/user-approvals/{user}/reject', [UserApprovalController::class, 'reject'])->name('user-approvals.reject');
-    });
+    // Absensi — versi dummy untuk UI sesuai mockup
+    Route::get('/attendance', [\App\Http\Controllers\AttendanceController::class, 'index'])->name('attendance.index');
 });
+
 
