@@ -9,6 +9,7 @@ use App\Models\LeaveRequest;
 use App\Models\Notifikasi;
 use App\Models\Payroll;
 use App\Models\User;
+use App\Support\WorkCalendar;
 use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Contracts\View\View;
@@ -52,6 +53,12 @@ class DashboardController extends Controller
         $summary = [];
         foreach (self::STATUSES as $key) {
             $summary[$key] = $this->applyStatus(clone $scope, $key, $scopes)->count();
+        }
+
+        // Di luar hari kerja (config/attendance.php) tidak ada yang dihitung "absent".
+        $workingDay = WorkCalendar::isWorkingDay($now);
+        if (! $workingDay) {
+            $summary['absent'] = 0;
         }
 
         // ---- Antrean persetujuan (data nyata dari SDD) ----
@@ -112,7 +119,7 @@ class DashboardController extends Controller
 
         $cutoffTime = $cutoff->format('H:i:s');
 
-        $rows = $employees->map(function (Employee $employee) use ($cutoffTime, $leaveIds) {
+        $rows = $employees->map(function (Employee $employee) use ($cutoffTime, $leaveIds, $workingDay) {
             $firstIn = $employee->first_check_in; // TIME 'HH:MM:SS' atau null
 
             return [
@@ -120,7 +127,7 @@ class DashboardController extends Controller
                 'photo' => $employee->photo_url,
                 'status' => $firstIn
                     ? ($firstIn <= $cutoffTime ? 'on_time' : 'late')
-                    : ($leaveIds->has($employee->id_karyawan) ? 'leave' : 'absent'),
+                    : ($leaveIds->has($employee->id_karyawan) ? 'leave' : ($workingDay ? 'absent' : 'off')),
                 'check_in' => $firstIn ? CarbonImmutable::parse($firstIn)->format('H.i') : null,
             ];
         });
