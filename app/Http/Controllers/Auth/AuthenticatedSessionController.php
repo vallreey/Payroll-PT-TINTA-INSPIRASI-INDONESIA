@@ -30,12 +30,21 @@ class AuthenticatedSessionController extends Controller
 
         $user = Auth::user();
 
+        // Akun dinonaktifkan Super Admin (AC-003)
+        if (! $user->isActive()) {
+            Auth::logout();
+
+            return back()
+                ->withErrors(['auth' => 'Akun Anda dinonaktifkan. Hubungi Super Admin.'])
+                ->onlyInput('email');
+        }
+
         // Akun belum di-approve Super Admin (use case 001 & FR-001 di SRS)
-        if ($user->status !== 'approved') {
+        if (! $user->isApproved()) {
             Auth::logout();
 
             return back()->withErrors([
-                'auth' => match ($user->status) {
+                'auth' => match ($user->status_persetujuan) {
                     'pending' => 'Akun Anda masih menunggu persetujuan Super Admin.',
                     'rejected' => 'Registrasi akun Anda ditolak. Hubungi HRD.',
                     default => 'Akun tidak dapat digunakan.',

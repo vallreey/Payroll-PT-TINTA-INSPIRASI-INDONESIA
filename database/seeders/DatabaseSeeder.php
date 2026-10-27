@@ -18,8 +18,8 @@ class DatabaseSeeder extends Seeder
         // User::factory(10)->create();
         $this->call(PayrollSystemSeeder::class);
 
-        User::factory()->create([
-            'name' => 'Test User',
+        User::factory()->approved()->create([
+            'username' => 'testuser',
             'email' => 'test@example.com',
         ]);
     }

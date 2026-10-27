@@ -22,16 +22,16 @@ class RegisteredEmployeeController extends Controller
 
     /**
      * Memproses Registrasi:
-     * - Membuat akun User dengan role "karyawan" & status "pending"
-     * - Membuat data Employee terkait (menyimpan NIK)
+     * - Membuat akun User dengan role "karyawan" & status_persetujuan "pending"
+     * - Membuat data Employee terkait (NIK + nama lengkap)
      * - Akun baru menunggu persetujuan Super Admin (sesuai use case 001 SRS)
      */
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'nik' => ['required', 'string', 'max:32', 'unique:employees,nik'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'name' => ['required', 'string', 'max:150'],
+            'nik' => ['required', 'string', 'max:20', 'unique:tbl_karyawan,nik'],
+            'email' => ['required', 'string', 'email', 'max:150', 'unique:tbl_pengguna,email'],
             'password' => ['required', 'string', 'min:8'],
         ], [
             'nik.unique' => 'NIK ini sudah terdaftar.',
@@ -40,16 +40,17 @@ class RegisteredEmployeeController extends Controller
 
         DB::transaction(function () use ($validated) {
             $user = User::create([
-                'name' => $validated['name'],
                 'email' => $validated['email'],
                 'password' => $validated['password'], // otomatis di-hash lewat cast 'hashed' di model
                 'role' => 'karyawan',
-                'status' => 'pending',
+                'status_persetujuan' => 'pending',
             ]);
 
+            // Nama lengkap disimpan di tbl_karyawan (SDD)
             Employee::create([
-                'user_id' => $user->id,
+                'id_pengguna' => $user->id_pengguna,
                 'nik' => $validated['nik'],
+                'nama_lengkap' => $validated['name'],
             ]);
         });
 

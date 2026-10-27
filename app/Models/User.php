@@ -2,21 +2,27 @@
 
 namespace App\Models;
 
-use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
 
+/** Tabel SDD: tbl_pengguna */
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasFactory;
+
+    protected $table = 'tbl_pengguna';
+
+    protected $primaryKey = 'id_pengguna';
 
     protected $fillable = [
-        'name',
+        'username',
         'email',
         'password',
         'role',
         'status',
+        'status_persetujuan',
+        'foto_profil',
         'approved_by',
         'approved_at',
     ];
@@ -39,12 +45,25 @@ class User extends Authenticatable
 
     public function employee()
     {
-        return $this->hasOne(Employee::class);
+        return $this->hasOne(Employee::class, 'id_pengguna', 'id_pengguna');
     }
 
     public function approvedBy()
     {
-        return $this->belongsTo(User::class, 'approved_by');
+        return $this->belongsTo(User::class, 'approved_by', 'id_pengguna');
+    }
+
+    public function notifikasi()
+    {
+        return $this->hasMany(Notifikasi::class, 'id_pengguna', 'id_pengguna');
+    }
+
+    // ================= Accessor =================
+
+    // Nama lengkap ada di tbl_karyawan (SDD). Akun "Admin murni" tanpa data karyawan memakai username.
+    protected function namaTampil(): Attribute
+    {
+        return Attribute::get(fn () => $this->employee?->nama_lengkap ?? $this->username ?? $this->email);
     }
 
     // ================= Helper Role =================
@@ -74,9 +93,16 @@ class User extends Authenticatable
         return $this->role === 'karyawan';
     }
 
+    // Registrasi sudah disetujui Super Admin
     public function isApproved(): bool
     {
-        return $this->status === 'approved';
+        return $this->status_persetujuan === 'approved';
+    }
+
+    // Akun tidak dinonaktifkan
+    public function isActive(): bool
+    {
+        return $this->status === 'aktif';
     }
 
     // Role yang berhak melakukan approval (HRD, Supervisor, Direktur, Super Admin)

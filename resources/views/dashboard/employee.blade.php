@@ -1,6 +1,6 @@
 <x-app-layout title="Dashboard">
     <x-slot:heading>
-        <h1 class="text-xl font-semibold text-gray-900 sm:text-2xl">Selamat {{ $greeting }}, {{ $user->name }} <span aria-hidden="true">👋</span></h1>
+        <h1 class="text-xl font-semibold text-gray-900 sm:text-2xl">Selamat {{ $greeting }}, {{ $user->nama_tampil }} <span aria-hidden="true">👋</span></h1>
         <p class="mt-0.5 text-xs text-gray-700">Hari ini {{ $dateLabel }}.</p>
     </x-slot:heading>
 
