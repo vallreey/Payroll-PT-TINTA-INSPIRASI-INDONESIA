@@ -28,41 +28,43 @@
     </x-slot:heading>
 
     {{-- ================= KARTU STATISTIK ================= --}}
-    <section aria-label="Ringkasan perusahaan" class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <section aria-label="Ringkasan perusahaan" class="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         @foreach ($stats as $stat)
-            <div class="rounded-2xl bg-white p-4 shadow-card">
+            <div class="rounded-2xl bg-white p-5 shadow-card">
                 <div class="flex items-start justify-between gap-3">
                     <div>
-                        <p class="text-2xl font-semibold tracking-tight text-gray-900">{{ $stat['value'] }}</p>
-                        <p class="mt-1 text-xs text-gray-800">{{ $stat['label'] }}</p>
+                        <p class="text-3xl font-semibold tracking-tight text-gray-900">{{ $stat['value'] }}</p>
+                        <p class="mt-1 text-sm text-gray-800">{{ $stat['label'] }}</p>
                     </div>
-                    <span class="flex size-10 shrink-0 items-center justify-center rounded-full {{ $tones[$stat['tone']] }}">
-                        <x-icon :name="$stat['icon']" size="size-5" />
+                    <span class="flex size-12 shrink-0 items-center justify-center rounded-full {{ $tones[$stat['tone']] }}">
+                        <x-icon :name="$stat['icon']" size="size-6" />
                     </span>
                 </div>
-                <div class="mt-3 flex min-h-6 items-center justify-between gap-2 border-t border-gray-200 pt-2 text-[10px] text-gray-600">
-                    <p class="flex items-center gap-1.5">
+                <div class="mt-4 flex min-h-8 items-center justify-between gap-2 border-t border-gray-200 pt-3 text-[11px] text-gray-600">
+                    <p class="flex items-center gap-1.5 whitespace-nowrap">
                         @if ($stat['caption'])
-                            <x-icon name="arrow-up" size="size-3.5" class="text-green-500" />
-                            {{ $stat['caption'] }}
+                            @if ($stat['caption']['trend'])
+                                <x-icon name="arrow-up" size="size-4" class="text-green-500" />
+                            @endif
+                            {{ $stat['caption']['text'] }}
                         @endif
                     </p>
                     @if ($stat['route'] && $has($stat['route']))
                         <a href="{{ route($stat['route']) }}" aria-label="Lihat {{ $stat['label'] }}" class="text-gray-400 hover:text-gray-600">
-                            <x-icon name="play" size="size-3.5" />
+                            <x-icon name="play" size="size-4" />
                         </a>
                     @else
-                        <x-icon name="play" size="size-3.5" class="text-gray-300" />
+                        <x-icon name="play" size="size-4" class="text-gray-300" />
                     @endif
                 </div>
             </div>
         @endforeach
     </section>
 
-    <div class="mt-4 grid items-start gap-4 lg:grid-cols-2 lg:gap-3.5">
+    <div class="mt-6 grid items-start gap-6 xl:grid-cols-[1.15fr_1fr]">
 
         {{-- ================= ATTENDANCE ================= --}}
-        <section class="rounded-2xl bg-white p-4 shadow-card" aria-labelledby="attendance-heading">
+        <section class="min-w-0 rounded-2xl bg-white p-5 shadow-card" aria-labelledby="attendance-heading">
             <div class="flex items-center justify-between">
                 <h2 id="attendance-heading" class="text-base font-semibold text-gray-900">Attendance</h2>
                 @if ($has('attendance.index'))
@@ -78,8 +80,8 @@
                 @endif
             </div>
 
-            <ul class="mt-4 flex flex-wrap items-center gap-y-2 px-1 text-xs">
-                <li class="flex items-center gap-2 pr-4">
+            <ul class="mt-5 flex flex-wrap items-center gap-y-2 text-sm">
+                <li class="flex items-center gap-2 pr-3">
                     <span class="size-2.5 rounded-full bg-green-500" aria-hidden="true"></span>
                     <strong class="font-semibold">{{ $summary['on_time'] }}</strong>
                     <span class="font-medium text-gray-400">On-Time</span>
@@ -103,8 +105,8 @@
                 @endif
             </ul>
 
-            <div class="mt-4 overflow-x-auto rounded-2xl border border-gray-100">
-                <table class="w-full text-left text-sm">
+            <div class="mt-5 overflow-x-auto rounded-2xl border border-gray-100">
+                <table class="w-full min-w-[320px] text-left text-sm">
                     <thead>
                         <tr class="bg-slate-100 text-gray-900">
                             <th scope="col" class="rounded-tl-2xl px-2 py-3 font-medium whitespace-nowrap sm:px-4">Employee Name</th>
@@ -137,7 +139,7 @@
         </section>
 
         {{-- ================= KOLOM KANAN ================= --}}
-        <div class="space-y-4">
+        <div class="min-w-0 space-y-6">
 
             {{-- Notification / Submission / Approval --}}
             <section x-data="{ tab: 'notification' }" class="rounded-2xl bg-white shadow-card" aria-label="Notifikasi, pengajuan, dan persetujuan">
@@ -185,21 +187,27 @@
                         </div>
                     </form>
 
-                    <div class="min-h-24">
-                        @if ($announcements->isNotEmpty())
-                            <ul class="mt-4 space-y-4">
-                                @foreach ($announcements as $a)
-                                    <li>
-                                        <p class="text-sm font-medium text-gray-900">{{ $a->title }}</p>
-                                        <p class="mt-0.5 line-clamp-2 text-xs text-gray-600">{{ $a->body }}</p>
-                                        <p class="mt-1 text-[11px] text-gray-400">{{ $a->published_at->locale('id')->translatedFormat('j F Y') }}</p>
+                    <div class="min-h-56">
+                        @if ($notifications->isNotEmpty())
+                            <ul class="mt-4 divide-y divide-gray-100">
+                                @foreach ($notifications as $n)
+                                    <li class="flex gap-3 py-3 first:pt-0 last:pb-0">
+                                        <span class="mt-1.5 size-2 shrink-0 rounded-full {{ $n->is_read ? 'bg-gray-200' : 'bg-blue-500' }}" aria-hidden="true"></span>
+                                        <div class="min-w-0">
+                                            <p class="text-sm {{ $n->is_read ? 'font-normal text-gray-700' : 'font-medium text-gray-900' }}">
+                                                {{ $n->judul }}
+                                                @unless ($n->is_read)<span class="sr-only">(belum dibaca)</span>@endunless
+                                            </p>
+                                            <p class="mt-0.5 line-clamp-2 text-xs text-gray-600">{{ $n->pesan }}</p>
+                                            <p class="mt-1 text-[11px] text-gray-400">{{ ucfirst($n->tipe) }}, {{ $n->created_at->locale('id')->diffForHumans() }}</p>
+                                        </div>
                                     </li>
                                 @endforeach
                             </ul>
                         @else
-                            <div class="flex min-h-24 flex-col items-center justify-center text-center text-xs text-gray-900">
-                                @if ($search !== '' || $period)
-                                    <p>No announcement matches your search</p>
+                            <div class="flex min-h-56 flex-col items-center justify-center text-center text-xs text-gray-900">
+                                @if ($search !== '' || $tipe)
+                                    <p>No notification matches your search</p>
                                     <a href="{{ route('dashboard') }}" class="mt-1 font-medium text-blue-600 hover:underline">Reset</a>
                                 @else
                                     <p>There is no notification</p>
@@ -271,12 +279,12 @@
                         @if ($has('leaves.index'))
                             <a href="{{ route('leaves.index') }}" aria-label="Buka halaman izin dan cuti"
                                class="flex size-9 items-center justify-center rounded-lg border border-blue-500 text-gray-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-500">
-                                <img src="{{ asset('images/Calendar.png') }}" alt="" aria-hidden="true" class="size-4">
+                                <x-icon name="calendar" size="size-4" />
                             </a>
                         @else
-                            <span aria-disabled="true" title="Kalender belum tersedia"
-                                  class="flex size-9 cursor-not-allowed items-center justify-center rounded-lg border border-blue-200 text-gray-400">
-                                <img src="{{ asset('images/Calendar.png') }}" alt="" aria-hidden="true" class="size-4">
+                            <span aria-disabled="true" title="Halaman izin dan cuti belum tersedia"
+                                  class="flex size-9 cursor-default items-center justify-center rounded-lg border border-blue-200 text-gray-400">
+                                <x-icon name="calendar" size="size-4" />
                             </span>
                         @endif
                     </div>

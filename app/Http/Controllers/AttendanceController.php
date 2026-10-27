@@ -2,246 +2,116 @@
 
 namespace App\Http\Controllers;
 
-use App\Exceptions\AttendanceException;
-use App\Models\Attendance;
-use App\Models\Department;
-use App\Models\Employee;
-use App\Models\User;
-use App\Services\ApprovalService;
-use App\Services\AttendanceSummary;
-use App\Support\SimpleXlsx;
-use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
-/**
- * Halaman PEMANTAUAN absensi.
- */
 class AttendanceController extends Controller
 {
-    private const STATUS_FILTERS = ['on_time', 'late', 'pending', 'approved', 'rejected'];
-
-    private const EXPORT_LIMIT = 5000;
-
-    public function __construct(private ApprovalService $approvals)
+    public function index(Request $request): View
     {
-    }
+        $search = trim((string) $request->query('search', ''));
+        $date = $request->query('date', '2026-06-21');
+        $division = $request->query('division', 'all');
+        $status = $request->query('status', 'all');
 
-    public function index(Request $request, AttendanceSummary $summary): View
-    {
-        $user = $request->user();
-        $filters = $this->filters($request, $user);
+        $employees = [
+            [
+                'name' => 'Ageng Saputro',
+                'division' => 'Divisi A',
+                'check_in' => '09.00',
+                'check_out' => '16.00',
+                'evidence' => 'Img 1',
+                'status' => 'On-Time',
+                'status_key' => 'on_time',
+            ],
+            [
+                'name' => 'Eka Bayu Wiguna',
+                'division' => 'Divisi A',
+                'check_in' => '09.10',
+                'check_out' => '16.00',
+                'evidence' => 'Img 2',
+                'status' => 'Late',
+                'status_key' => 'late',
+            ],
+            [
+                'name' => 'Joko Mulia',
+                'division' => 'Divisi A',
+                'check_in' => '09.00',
+                'check_out' => '16.00',
+                'evidence' => 'Img 3',
+                'status' => 'On-Time',
+                'status_key' => 'on_time',
+            ],
+            [
+                'name' => 'Maya Lestari',
+                'division' => 'Divisi B',
+                'check_in' => '08.50',
+                'check_out' => '15.50',
+                'evidence' => 'Img 4',
+                'status' => 'On-Time',
+                'status_key' => 'on_time',
+            ],
+            [
+                'name' => 'Rizki Pratama',
+                'division' => 'Divisi B',
+                'check_in' => '09.35',
+                'check_out' => '17.00',
+                'evidence' => 'Img 5',
+                'status' => 'Late',
+                'status_key' => 'late',
+            ],
+        ];
 
-        $rows = $this->query($user, $filters)->paginate(config('attendance.per_page', 10))->withQueryString();
+        $filtered = array_values(array_filter($employees, function (array $employee) use ($search, $division, $status) {
+            if ($search !== '' && stripos($employee['name'], $search) === false) {
+                return false;
+            }
 
-        $canApprove = [];
-        foreach ($rows as $attendance) {
-            $canApprove[$attendance->id_absensi] = $this->approvals->canApprove($user, $attendance);
-        }
+            if ($division !== 'all' && $employee['division'] !== $division) {
+                return false;
+            }
 
-        $isManager = $user->isApprover();
-        $summaryDate = $filters['date'] ?? CarbonImmutable::now()->startOfDay();
+            if ($status !== 'all' && $employee['status'] !== $status) {
+                return false;
+            }
+
+            return true;
+        }));
+
+        $present = [
+            'on_time' => count(array_filter($filtered, fn (array $employee) => $employee['status_key'] === 'on_time')),
+            'early_clock_in' => 0,
+            'late_clock_in' => count(array_filter($filtered, fn (array $employee) => $employee['status_key'] === 'late')),
+        ];
+
+        $absent = [
+            'leaved' => 0,
+            'no_clock_in' => 0,
+            'no_clock_out' => 0,
+            'day_off' => 0,
+            'time_off' => 0,
+        ];
+
+        $away = [
+            'total' => 0,
+        ];
+
+        $summary = [
+            'present' => $present,
+            'absent' => $absent,
+            'away' => $away,
+        ];
 
         return view('attendance.index', [
-            'user' => $user,
-            'isManager' => $isManager,
-            'rows' => $rows,
-            'canApprove' => $canApprove,
-            'filters' => $filters,
-            'activeFilters' => collect([$filters['date'], $filters['division'], $filters['status']])->filter()->count(),
-            'departments' => $isManager ? Department::query()->orderBy('nama_departemen')->get(['id_departemen', 'nama_departemen']) : collect(),
-            'summary' => $isManager ? $summary->forDate(Employee::query()->visibleTo($user), $summaryDate) : null,
-            'summaryDate' => $summaryDate,
-            'canRecord' => $user->employee !== null,
-        ]);
-    }
-
-    public function approve(Request $request, Attendance $attendance): RedirectResponse
-    {
-        return $this->decide($request, $attendance, 'approve');
-    }
-
-    public function reject(Request $request, Attendance $attendance): RedirectResponse
-    {
-        return $this->decide($request, $attendance, 'reject');
-    }
-
-    /** Foto bukti kehadiran. Disimpan privat; hanya yang berhak melihat karyawan tersebut yang boleh membukanya. */
-    public function photo(Request $request, Attendance $attendance, string $jenis)
-    {
-        abort_unless(in_array($jenis, ['masuk', 'keluar'], true), 404);
-        $this->authorizeView($request->user(), $attendance);
-
-        $path = $jenis === 'masuk' ? $attendance->foto_masuk : $attendance->foto_keluar;
-        abort_if(! $path || ! Storage::disk('local')->exists($path), 404);
-
-        return Storage::disk('local')->response($path, null, [
-            'Cache-Control' => 'private, max-age=3600',
-            'X-Content-Type-Options' => 'nosniff',
-        ]);
-    }
-
-    public function exportExcel(Request $request): Response|StreamedResponse
-    {
-        $user = $request->user();
-        $filters = $this->filters($request, $user);
-
-        $rows = $this->query($user, $filters)->limit(self::EXPORT_LIMIT)->get()
-            ->map(fn (Attendance $a) => $this->exportRow($a));
-
-        $binary = SimpleXlsx::build($this->exportHeaders(), $rows, 'Absensi');
-        $name = 'absensi-'.($filters['date']?->toDateString() ?? 'semua-tanggal').'.xlsx';
-
-        return response($binary, 200, [
-            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition' => 'attachment; filename="'.$name.'"',
-            'Cache-Control' => 'private, no-store',
-        ]);
-    }
-
-    /** Halaman siap cetak; pengguna memilih "Simpan sebagai PDF" di dialog cetak browser. */
-    public function exportPrint(Request $request): View
-    {
-        $user = $request->user();
-        $filters = $this->filters($request, $user);
-
-        $rows = $this->query($user, $filters)->limit(self::EXPORT_LIMIT)->get()
-            ->map(fn (Attendance $a) => $this->exportRow($a));
-
-        return view('attendance.print', [
-            'headers' => $this->exportHeaders(),
-            'rows' => $rows,
-            'filters' => $filters,
-            'printedBy' => $user->nama_tampil,
-        ]);
-    }
-
-    // ---------------------------------------------------------------------
-
-    private function decide(Request $request, Attendance $attendance, string $action): RedirectResponse
-    {
-        $user = $request->user();
-        $attendance->loadMissing('employee');
-
-        // 403: bukan penyetuju, tidak berhak melihat karyawan ini, atau mencoba menyetujui absensinya sendiri
-        // / absensi non-bawahan (Supervisor).
-        abort_unless(in_array($user->role, ApprovalService::APPROVER_ROLES, true), 403);
-        $this->authorizeView($user, $attendance);
-
-        if ($attendance->status_persetujuan !== 'pending') {
-            return back()->with('error', 'Absensi ini sudah diproses.');
-        }
-
-        abort_unless($this->approvals->canApprove($user, $attendance), 403);
-
-        try {
-            $action === 'approve'
-                ? $this->approvals->approve($attendance, $user)
-                : $this->approvals->reject($attendance, $user);
-        } catch (AttendanceException $e) {
-            return back()->with('error', $e->getMessage());
-        }
-
-        return back()->with('status', $action === 'approve' ? 'Absensi disetujui.' : 'Absensi ditolak.');
-    }
-
-    private function authorizeView(User $user, Attendance $attendance): void
-    {
-        $allowed = Employee::query()->visibleTo($user)->whereKey($attendance->id_karyawan)->exists();
-        abort_unless($allowed, 403);
-    }
-
-    /** @return array{date: ?CarbonImmutable, division: ?int, status: ?string, q: string} */
-    private function filters(Request $request, User $user): array
-    {
-        // Tanggal: bila parameter tidak ada, Super Admin/HRD/Supervisor/Direktur melihat HARI INI;
-        // karyawan melihat riwayatnya. Parameter kosong (date=) berarti semua tanggal.
-        $date = null;
-        if ($request->has('date')) {
-            $raw = (string) $request->query('date');
-            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $raw, $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1])) {
-                $date = CarbonImmutable::createFromFormat('Y-m-d', $raw)->startOfDay();
-            }
-        } elseif ($user->isApprover()) {
-            $date = CarbonImmutable::now()->startOfDay();
-        }
-
-        $division = (int) $request->query('division');
-        $division = $division > 0 && Department::query()->whereKey($division)->exists() ? $division : null;
-
-        $status = $request->query('status');
-        $status = is_string($status) && in_array($status, self::STATUS_FILTERS, true) ? $status : null;
-
-        return [
+            'pageTitle' => 'Absensi',
+            'search' => $search,
             'date' => $date,
             'division' => $division,
             'status' => $status,
-            'q' => Str::limit(trim((string) $request->query('q', '')), 100, ''),
-        ];
-    }
-
-    private function query(User $user, array $filters): Builder
-    {
-        $query = Attendance::query()
-            ->with(['employee.user:id_pengguna,foto_profil', 'employee.department:id_departemen,nama_departemen'])
-            ->whereIn('tbl_absensi.id_karyawan', Employee::query()->visibleTo($user)->select('tbl_karyawan.id_karyawan'));
-
-        if ($filters['date']) {
-            $query->where('tbl_absensi.tanggal', $filters['date']->toDateString());
-        }
-        if ($filters['division']) {
-            $query->whereHas('employee', fn (Builder $q) => $q->where('id_departemen', $filters['division']));
-        }
-        if ($filters['q'] !== '') {
-            $like = '%'.addcslashes($filters['q'], '%_\\').'%';
-            $query->whereHas('employee', fn (Builder $q) => $q
-                ->where('nama_lengkap', 'like', $like)
-                ->orWhere('nik', 'like', $like));
-        }
-
-        match ($filters['status']) {
-            'on_time' => $query->where('tbl_absensi.status', 'hadir'),
-            'late' => $query->where('tbl_absensi.status', 'terlambat'),
-            'pending', 'approved', 'rejected' => $query->where('tbl_absensi.status_persetujuan', $filters['status']),
-            default => null,
-        };
-
-        // Penyetuju melihat yang menunggu persetujuan lebih dulu.
-        if ($user->isApprover()) {
-            $query->orderByRaw("CASE WHEN tbl_absensi.status_persetujuan = 'pending' THEN 0 ELSE 1 END");
-        }
-
-        return $query->orderByDesc('tbl_absensi.tanggal')->orderBy('tbl_absensi.jam_masuk')->orderBy('tbl_absensi.id_absensi');
-    }
-
-    /** @return list<string> */
-    private function exportHeaders(): array
-    {
-        return ['Tanggal', 'NIK', 'Nama', 'Divisi', 'Check-in', 'Check-out', 'Status', 'Persetujuan', 'Lat masuk', 'Long masuk'];
-    }
-
-    /** @return list<string|null> */
-    private function exportRow(Attendance $a): array
-    {
-        $time = fn (?string $t) => $t ? substr(str_replace(':', '.', $t), 0, 5) : null;
-
-        return [
-            CarbonImmutable::parse($a->tanggal)->format('d-m-Y'),
-            $a->employee?->nik,
-            $a->employee?->nama_lengkap,
-            $a->employee?->department?->nama_departemen,
-            $time($a->jam_masuk),
-            $time($a->jam_keluar),
-            $a->status === 'terlambat' ? 'Late' : 'On-Time',
-            ['pending' => 'Menunggu', 'approved' => 'Disetujui', 'rejected' => 'Ditolak'][$a->status_persetujuan] ?? $a->status_persetujuan,
-            (string) $a->lat_masuk,
-            (string) $a->long_masuk,
-        ];
+            'rows' => $filtered,
+            'summary' => $summary,
+            'divisions' => ['all' => 'Semua Divisi', 'Divisi A' => 'Divisi A', 'Divisi B' => 'Divisi B'],
+            'statuses' => ['all' => 'Semua Status', 'On-Time' => 'On-Time', 'Late' => 'Late'],
+        ]);
     }
 }

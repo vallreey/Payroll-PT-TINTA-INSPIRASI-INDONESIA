@@ -98,30 +98,6 @@ class Employee extends Model
 
     // ================= Scope =================
 
-    /**
-     * Karyawan yang boleh dilihat pengguna ini (dipakai halaman Absensi dan akses foto):
-     * Super Admin / HRD / Direktur = semua; Supervisor = bawahan langsung + dirinya sendiri;
-     * Karyawan = hanya dirinya sendiri.
-     */
-    public function scopeVisibleTo($query, User $user)
-    {
-        if ($user->isSuperAdmin() || $user->isHrd() || $user->isDirektur()) {
-            return $query;
-        }
-
-        $ownId = $user->employee?->id_karyawan ?? 0;
-
-        if ($user->isSupervisor()) {
-            return $query->where(fn ($q) => $q
-                ->where('tbl_karyawan.id_atasan', $ownId)
-                ->orWhere('tbl_karyawan.id_karyawan', $ownId));
-        }
-
-        return $query->where('tbl_karyawan.id_karyawan', $ownId);
-    }
-
-    // ================= Accessor =================
-
     // URL foto profil (tbl_pengguna.foto_profil, disk public; jalankan `php artisan storage:link`).
     protected function photoUrl(): Attribute
     {

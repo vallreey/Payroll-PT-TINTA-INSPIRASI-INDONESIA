@@ -38,6 +38,8 @@ Route::middleware('auth')->group(function () {
     // Dashboard — tampilan menyesuaikan role (lihat DashboardController)
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
+    // Absensi — versi dummy untuk UI sesuai mockup
+    Route::get('/attendance', [\App\Http\Controllers\AttendanceController::class, 'index'])->name('attendance.index');
     // ---------- Absensi ----------
     // Pemantauan & persetujuan (web). URL lama /attendance tetap hidup sebagai alamat yang sama.
     Route::get('/attendance', [AttendanceController::class, 'index'])->name('attendance.index');
