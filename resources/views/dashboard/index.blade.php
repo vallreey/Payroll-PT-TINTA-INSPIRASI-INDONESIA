@@ -7,6 +7,7 @@
         'late'    => ['Late',     'border-red-500 bg-red-50 text-red-600'],
         'absent'  => ['Absent',   'border-amber-400 bg-amber-50 text-amber-500'],
         'leave'   => ['On Leave', 'border-sky-400 bg-sky-50 text-sky-600'],
+        'off'     => ['Off',      'border-gray-300 bg-gray-50 text-gray-500'],
     ];
 
     $tones = [

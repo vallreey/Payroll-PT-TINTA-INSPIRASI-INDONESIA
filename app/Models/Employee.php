@@ -96,7 +96,7 @@ class Employee extends Model
         return $this->hasMany(Payroll::class, 'id_karyawan', 'id_karyawan');
     }
 
-    // ================= Accessor =================
+    // ================= Scope =================
 
     // URL foto profil (tbl_pengguna.foto_profil, disk public; jalankan `php artisan storage:link`).
     protected function photoUrl(): Attribute
