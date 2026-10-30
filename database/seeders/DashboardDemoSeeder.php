@@ -10,6 +10,7 @@ use App\Models\Notifikasi;
 use App\Models\Payroll;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Data contoh HANYA untuk melihat tampilan dashboard saat development.
@@ -18,6 +19,8 @@ use Illuminate\Database\Seeder;
  */
 class DashboardDemoSeeder extends Seeder
 {
+    private const PLACEHOLDER = 'absensi/demo/placeholder.png';
+
     public function run(): void
     {
         if (app()->isProduction()) {
@@ -37,6 +40,7 @@ class DashboardDemoSeeder extends Seeder
 
         $today = now()->startOfDay();
         $employees = collect();
+        $this->placeholderPhoto();
 
         foreach ($names as $i => $name) {
             $user = User::firstOrCreate(
@@ -58,8 +62,10 @@ class DashboardDemoSeeder extends Seeder
                     'nik' => '3302'.str_pad((string) ($i + 1), 12, '0', STR_PAD_LEFT),
                     'nama_lengkap' => $name,
                     'jabatan' => ['Staff Marketing', 'Desainer', 'Teknisi Lapangan', 'Admin'][$i % 4],
-                    'tanggal_masuk' => $today->copy()->subMonths(6)->toDateString(),
-                    'status_kepegawaian' => 'tetap',
+                    // Variasi data agar ringkasan halaman Karyawan terlihat realistis
+                    'jenis_kelamin' => $i % 2 === 0 ? 'L' : 'P',
+                    'tanggal_masuk' => $today->copy()->subMonths(6 + $i)->toDateString(),
+                    'status_kepegawaian' => ['tetap', 'tetap', 'tetap', 'kontrak', 'percobaan', 'tetap'][$i % 6],
                     'gaji_pokok' => 4500000,
                 ],
             );
@@ -100,7 +106,62 @@ class DashboardDemoSeeder extends Seeder
             }
         }
 
+        $this->seedHistory($employees, $today);
         $this->seedExtras($employees, $today);
+    }
+
+    /** Foto contoh di disk privat, agar tautan "Img 1" di halaman Absensi bisa dibuka. */
+    private function placeholderPhoto(): void
+    {
+        $disk = Storage::disk('local');
+
+        if (! $disk->exists(self::PLACEHOLDER)) {
+            $disk->put(self::PLACEHOLDER, base64_decode('iVBORw0KGgoAAAANSUhEUgAAAUAAAADwCAIAAAD+Tyo8AAADnklEQVR42u3cMY6rWhBFUWMxGVIS5h8iJGfIMTPxFCxhZE7VWvEPHrfupuhW6w/bfjyATE9HAAIGBAwIGAQMCBgQMCBgEDAgYEDAIGBAwICAAQGDgAEBAwIGBAwCBgQMCBgEDAgYEDAgYBAwIGBAwICAQcCAgAEBg4ABAQMCBgQMAgYEDPzC6AjKWF/v7//jZZ6cWAHDth9OoUOxehYw1bpVsoCp0K2SBUyRdGUsYOLTlbGAiU9XxgImPl0Z35Y/5FBvtX+hDYwwrGIbmNJrzSoWMNklaNgntHQr8DltA6vXsyBgN94TCRh33XMJmHa3XMMCVq9nRMAgYKwmTypg2t1pDQvYbfbUCBgEjEXk2QXsBjsBBAwI2PJxDgIGBGztOA0EDALGwnEmAgYEbNU4GQQMAgYE7CvR+SBgEDAgYHwfOiUBAwIGAQMCBgR8e34346wEDAgYBAwIGBAwIGAQMCBgQMAgYEDAgIABAYOAAQGXt8yTQ3BWAgYEDAIGBAwI+Pb8bsYpCRgQMAgY34fOR8CAgAEB+0p0MgIGBGzVOBMEDALGwnEaAgYEbO04BwQMAsbycQICdoM9OwIGBGwReWoB4zZ7XgG7054UAYOAsZo8o4DpeL/VK2ANey4E7K57IgHjxqv3zoZtP5zCf62vt3SxgTXgXy5glKBen9AU/pyWrg1MahvqtYGJXMXSFTCRGUtXwERmLF0BE5mxdAVMXsm6FTB5JetWwCT1rFgBA3/mDzlAwICAAQGDgAEBAwIGBAy1jI7gatH/z7rz/MnXpfwllmL1LGDRilbMAtatkhGwdGUsYKQrYwFLFxkLWLoyRsDSlXEt/hJLvaZgA7s0WMU2sHoxFwG7JabjE9rlwOe0DaxezEvAbgOmJmD3wOwE7AZgggI2e8xRwKZO42n6GRgE7IWNmQrYpDFZAZuxhgUMCNjrGVMWsLli1j6hQcBeyZi4gAEBexnTeO42MAjYaxjTFzAgYOuXLnfABgYBe/XiJggYEDAI2FcT7oOAAQEDAgYB+4EHt0LAgIBBwICAAQGf4zdY9LkbNjAIGBAwIGAQMCBgQMCAgEHAgIABAYOAAQEDAgbaBrzMk7nS5G7YwCBgQMCAgEHAyfweiya3wgYGAQMCBgTsx2C63AcbGAQMCNhXE26CgMEG9urFHRAwIGAvYEzfBgYBew1j7gIGBOxlTOOJ28AgYK9kzFrA5oopCxgE7PWM+QrYjDHZ63wA2+eXjOT4DMEAAAAASUVORK5CYII='));
+        }
+    }
+
+    /** Riwayat 3 hari kerja terakhir, lengkap dengan check-out dan status persetujuan yang bervariasi. */
+    private function seedHistory($employees, $today): void
+    {
+        $days = collect();
+        $cursor = $today->copy();
+        while ($days->count() < 3) {
+            $cursor = $cursor->copy()->subDay();
+            if (\App\Support\WorkCalendar::isWorkingDay($cursor)) {
+                $days->push($cursor);
+            }
+        }
+
+        $approver = User::where('role', 'super_admin')->first();
+
+        foreach ($days as $d => $date) {
+            foreach ($employees as $i => $employee) {
+                $pattern = ($i + $d) % 6;
+                if ($pattern === 4) {
+                    continue; // tidak hadir
+                }
+
+                $late = $pattern === 3;
+                $masuk = $late ? $date->copy()->setTime(9, 10 + $i % 20) : $date->copy()->setTime(8, 40 + ($i * 3) % 20);
+                $keluar = $date->copy()->setTime(16, $i % 3 === 0 ? 5 : 20);
+
+                $attendance = Attendance::firstOrCreate(
+                    ['id_karyawan' => $employee->id_karyawan, 'tanggal' => $date->toDateString()],
+                    [
+                        'jam_masuk' => $masuk->format('H:i:s'),
+                        'jam_keluar' => $keluar->format('H:i:s'),
+                        'foto_masuk' => self::PLACEHOLDER,
+                        'foto_keluar' => self::PLACEHOLDER,
+                        'lat_masuk' => -7.4243, 'long_masuk' => 109.2302,
+                        'lat_keluar' => -7.4243, 'long_keluar' => 109.2302,
+                        'status' => $late ? 'terlambat' : 'hadir',
+                        'status_persetujuan' => $pattern === 5 ? 'rejected' : 'approved',
+                        'approved_by' => $approver?->id_pengguna,
+                        'approved_at' => $keluar,
+                    ],
+                );
+            }
+        }
     }
 
     private function seedExtras($employees, $today): void
@@ -160,7 +221,7 @@ class DashboardDemoSeeder extends Seeder
             ['id_karyawan' => $employee->id_karyawan, 'tanggal' => $at->toDateString()],
             [
                 'jam_masuk' => $at->format('H:i:s'),
-                'foto_masuk' => 'demo/placeholder.jpg',
+                'foto_masuk' => self::PLACEHOLDER,
                 'lat_masuk' => -7.4243,
                 'long_masuk' => 109.2302,
                 'status' => $late ? 'terlambat' : 'hadir',

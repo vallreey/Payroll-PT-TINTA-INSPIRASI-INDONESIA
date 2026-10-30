@@ -11,6 +11,12 @@ class Employee extends Model
 {
     use HasFactory;
 
+    // Jenis kepegawaian (nilai database => label di tampilan)
+    public const STATUS_KEPEGAWAIAN = ['tetap' => 'Permanent', 'kontrak' => 'Contract', 'percobaan' => 'Probation'];
+
+    // Jenis kelamin (nilai database => label di tampilan)
+    public const GENDER = ['L' => 'Male', 'P' => 'Female'];
+
     protected $table = 'tbl_karyawan';
 
     protected $primaryKey = 'id_karyawan';
@@ -94,6 +100,30 @@ class Employee extends Model
     public function payrolls()
     {
         return $this->hasMany(Payroll::class, 'id_karyawan', 'id_karyawan');
+    }
+
+    // ================= Scope =================
+
+    /**
+     * Karyawan yang boleh dilihat pengguna ini (dipakai halaman Absensi dan akses foto):
+     * Super Admin / HRD / Direktur = semua; Supervisor = bawahan langsung + dirinya sendiri;
+     * Karyawan = hanya dirinya sendiri.
+     */
+    public function scopeVisibleTo($query, User $user)
+    {
+        if ($user->isSuperAdmin() || $user->isHrd() || $user->isDirektur()) {
+            return $query;
+        }
+
+        $ownId = $user->employee?->id_karyawan ?? 0;
+
+        if ($user->isSupervisor()) {
+            return $query->where(fn ($q) => $q
+                ->where('tbl_karyawan.id_atasan', $ownId)
+                ->orWhere('tbl_karyawan.id_karyawan', $ownId));
+        }
+
+        return $query->where('tbl_karyawan.id_karyawan', $ownId);
     }
 
     // ================= Accessor =================
