@@ -6,13 +6,15 @@ use Illuminate\Database\Eloquent\Model;
 
 class LocationAssignment extends Model
 {
-    protected $table = 'tbl_penugasan_lokasi';
+    protected $table = 'tbl_penugasan_lokasi_tujuan';
 
-    protected $primaryKey = 'id_penugasan';
+    protected $primaryKey = 'id_tujuan';
 
     protected $fillable = [
         'id_karyawan',
         'nama_lokasi',
+        'keterangan',
+        'ikon',
         'latitude',
         'longitude',
         'id_pemberi_tugas',

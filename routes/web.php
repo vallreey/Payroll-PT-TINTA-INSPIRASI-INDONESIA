@@ -76,6 +76,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/tracking-lokasi/position', [LocationTrackingController::class, 'storePosition'])
         ->middleware('throttle:12,1')->name('tracking.position');
     Route::post('/tracking-lokasi/assignment', [LocationTrackingController::class, 'assign'])->name('tracking.assignment');
+    Route::put('/tracking-lokasi/assignment/{assignment}', [LocationTrackingController::class, 'updateAssignment'])
+        ->whereNumber('assignment')->name('tracking.assignment.update');
+    Route::delete('/tracking-lokasi/assignment/{assignment}', [LocationTrackingController::class, 'deleteAssignment'])
+        ->whereNumber('assignment')->name('tracking.assignment.delete');
     Route::post('/tracking-lokasi/places', [LocationTrackingController::class, 'storePlace'])->name('tracking.places.store');
     Route::get('/tracking-lokasi/search', [LocationTrackingController::class, 'search'])
         ->middleware('throttle:60,1')->name('tracking.search');
@@ -85,4 +89,6 @@ Route::middleware('auth')->group(function () {
         ->middleware('throttle:10,1')->name('tracking.route');
     Route::post('/tracking-lokasi/simulation/{employee}', [LocationTrackingController::class, 'simulate'])
         ->whereNumber('employee')->middleware('throttle:30,1')->name('tracking.simulate');
+    Route::delete('/tracking-lokasi/simulation', [LocationTrackingController::class, 'resetSimulation'])
+        ->name('tracking.simulation.reset');
 });

@@ -13,6 +13,15 @@ if (config && root) {
         iconSize: [22, 22],
         iconAnchor: [11, 11],
     })
+    const destinationIcons = {
+        pin: '📍',
+        office: '🏢',
+        warehouse: '🏭',
+        store: '🏪',
+        meeting: '🤝',
+        target: '🎯',
+    }
+    const destinationGlyph = (icon) => destinationIcons[icon] ?? destinationIcons.pin
 
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
         '&': '&amp;',
@@ -138,11 +147,20 @@ if (config && root) {
         baseLayer: null,
         routeLayer: null,
         historyLayer: null,
+        journeyLayer: null,
+        journeyMapInstance: null,
+        journeyMapBaseLayer: null,
+        journeyMapRouteLayer: null,
+        journeyMapLayer: null,
         markerLayer: null,
+        destinationLayer: null,
         annotationLayer: null,
         vehicleMarker: null,
+        currentJourneyMarker: null,
         clickHandler: null,
         markerSelectHandler: null,
+        journeyPointHandler: null,
+        destinationSelectHandler: null,
         initialize(container, options = {}) {
             this.destroy()
             this.instance = L.map(container, {
@@ -156,8 +174,10 @@ if (config && root) {
             })
             this.setBaseLayer('osm')
             this.routeLayer = L.polyline([], { color: '#2563eb', weight: 5, opacity: 0.9 }).addTo(this.instance)
-            this.historyLayer = L.polyline([], { color: '#06b6d4', weight: 4, opacity: 0.9 }).addTo(this.instance)
+            this.historyLayer = L.polyline([], { color: '#2563eb', weight: 4, opacity: 0.75 }).addTo(this.instance)
+            this.journeyLayer = L.layerGroup().addTo(this.instance)
             this.markerLayer = L.layerGroup().addTo(this.instance)
+            this.destinationLayer = L.layerGroup().addTo(this.instance)
             this.annotationLayer = L.layerGroup().addTo(this.instance)
             this.instance.on('click', (event) => this.clickHandler?.([event.latlng.lat, event.latlng.lng]))
             this.instance.setView(options.center ?? [-7.4243, 109.2302], options.zoom ?? 14)
@@ -167,6 +187,43 @@ if (config && root) {
         destroy() {
             this.instance?.remove()
             this.instance = null
+            this.journeyMapInstance?.remove()
+            this.journeyMapInstance = null
+        },
+        initializeJourneyMap(container) {
+            if (this.journeyMapInstance) return this.journeyMapInstance
+            this.journeyMapInstance = L.map(container, {
+                zoomControl: true,
+                scrollWheelZoom: true,
+                wheelPxPerZoomLevel: 60,
+                zoomSnap: 0.5,
+                zoomDelta: 0.5,
+            }).setView([-7.4243, 109.2302], 13)
+            this.journeyMapBaseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            }).addTo(this.journeyMapInstance)
+            this.journeyMapRouteLayer = L.polyline([], {
+                color: '#2563eb',
+                weight: 5,
+                opacity: 0.85,
+                lineCap: 'round',
+                lineJoin: 'round',
+            }).addTo(this.journeyMapInstance)
+            this.journeyMapLayer = L.layerGroup().addTo(this.journeyMapInstance)
+
+            return this.journeyMapInstance
+        },
+        invalidateJourneyMap() {
+            this.journeyMapInstance?.invalidateSize({ pan: false })
+        },
+        fitJourneyRoute() {
+            if (!this.journeyMapInstance) return
+            const bounds = L.featureGroup([this.journeyMapRouteLayer, this.journeyMapLayer]).getBounds()
+            if (bounds.isValid()) this.journeyMapInstance.fitBounds(bounds, { padding: [28, 28], maxZoom: 16 })
+        },
+        panToJourney(point) {
+            this.journeyMapInstance?.panTo(point, { animate: false })
         },
         setBaseLayer(layer) {
             if (!this.instance) return
@@ -186,6 +243,83 @@ if (config && root) {
                 : route?.coordinates?.map((point) => [point[1], point[0]]) ?? []
             layer.setLatLngs(points)
         },
+        setJourney(points, visits, realtimePoint = null, destinations = []) {
+            if (!this.journeyMapLayer || !this.journeyMapRouteLayer) return
+            this.journeyMapLayer.clearLayers()
+            this.currentJourneyMarker = null
+            this.journeyMapRouteLayer.setLatLngs(points.map((point) => [point.latitude, point.longitude]))
+            if (points.length) {
+                const start = points[0]
+                const startMarker = L.circleMarker([start.latitude, start.longitude], {
+                    radius: 8, color: '#fff', weight: 2, fillColor: '#16a34a', fillOpacity: 1,
+                }).addTo(this.journeyMapLayer)
+                startMarker.bindPopup(`<strong>Mulai</strong><br>${escapeHtml(start.recordedAt ? formatTime(start.recordedAt) : start.time)}`)
+                startMarker.on('click', () => this.journeyPointHandler?.({ type: 'start', point: start }))
+
+                visits.forEach((visit, index) => {
+                    const marker = L.marker([visit.latitude, visit.longitude], {
+                        icon: L.divIcon({
+                            className: '',
+                            html: `<span class="grid size-7 place-items-center rounded-full border-2 border-white bg-amber-500 text-[10px] font-semibold text-white shadow">${index + 1}</span>`,
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14],
+                        }),
+                    }).addTo(this.journeyMapLayer)
+                    marker.bindPopup(`<strong>${escapeHtml(visit.name)}</strong><br>${formatTime(visit.arrivedAt)} · ${formatDuration(visit.durationMs)}`)
+                    marker.on('click', () => this.journeyPointHandler?.({ type: 'visit', visit, index }))
+                })
+
+                if (points.length > 1) {
+                    const last = points.at(-1)
+                    const endMarker = L.circleMarker([last.latitude, last.longitude], {
+                        radius: 8, color: '#fff', weight: 2, fillColor: '#dc2626', fillOpacity: 1,
+                    }).addTo(this.journeyMapLayer)
+                    endMarker.bindPopup(`<strong>Terakhir tercatat</strong><br>${formatTime(last.recordedAt)}`)
+                    endMarker.on('click', () => this.journeyPointHandler?.({ type: 'end', point: last }))
+                }
+            }
+
+            destinations.forEach((destination) => {
+                const marker = L.marker([destination.latitude, destination.longitude], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<span class="grid size-8 place-items-center rounded-full border-2 border-white bg-indigo-600 text-base shadow">${destinationGlyph(destination.icon)}</span>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16],
+                    }),
+                }).addTo(this.journeyMapLayer)
+                marker.bindTooltip(escapeHtml(destination.name), {
+                    permanent: true,
+                    direction: 'right',
+                    offset: [8, 0],
+                    className: 'destination-tooltip',
+                })
+                const visitText = destination.visited
+                    ? `Dikunjungi ${formatTime(destination.visitedAt)}`
+                    : `Belum dikunjungi · radius ${destination.geofenceRadiusMeters} m`
+                marker.bindPopup(`<strong>${destinationGlyph(destination.icon)} ${escapeHtml(destination.name)}</strong><br>${escapeHtml(visitText)}${destination.description ? `<br>${escapeHtml(destination.description)}` : ''}`)
+                marker.on('click', () => this.journeyPointHandler?.({ type: 'destination', destination }))
+            })
+
+            this.setCurrentJourneyLocation(realtimePoint)
+        },
+        setCurrentJourneyLocation(point) {
+            if (!this.journeyMapLayer) return
+            if (this.currentJourneyMarker) this.journeyMapLayer.removeLayer(this.currentJourneyMarker)
+            this.currentJourneyMarker = null
+            if (!point) return
+            this.currentJourneyMarker = L.circleMarker([point.latitude, point.longitude], {
+                radius: 10,
+                color: '#fff',
+                weight: 3,
+                fillColor: point.isSimulated ? '#f59e0b' : '#7c3aed',
+                fillOpacity: 1,
+            }).addTo(this.journeyMapLayer)
+            this.currentJourneyMarker.bindPopup(point.isSimulated
+                ? '<strong>Lokasi terkini · Simulasi</strong>'
+                : '<strong>Lokasi terkini · Real-time</strong>')
+            this.currentJourneyMarker.on('click', () => this.journeyPointHandler?.({ type: 'current', point }))
+        },
         setMarkers(markers) {
             if (!this.markerLayer) return
             this.markerLayer.clearLayers()
@@ -198,6 +332,27 @@ if (config && root) {
                 }).addTo(this.markerLayer)
                 marker.bindPopup(`<strong>${escapeHtml(employee.name)}</strong><br>${employee.status === 'live' ? 'Online' : 'Offline'}${employee.location.isSimulated ? ' · Simulasi' : ''}`)
                 marker.on('click', () => this.markerSelectHandler?.(employee.id))
+            })
+        },
+        setDestinations(destinations) {
+            if (!this.destinationLayer) return
+            this.destinationLayer.clearLayers()
+            destinations.forEach(({ destination, employee }) => {
+                const marker = L.marker([destination.latitude, destination.longitude], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: `<span class="grid size-8 place-items-center rounded-full border-2 border-white bg-indigo-600 text-base shadow">${destinationGlyph(destination.icon)}</span>`,
+                        iconSize: [32, 32],
+                        iconAnchor: [16, 16],
+                    }),
+                }).addTo(this.destinationLayer)
+                marker.bindTooltip(escapeHtml(destination.name), {
+                    permanent: true,
+                    direction: 'right',
+                    offset: [8, 0],
+                    className: 'destination-tooltip',
+                })
+                marker.on('click', () => this.destinationSelectHandler?.({ destination, employee }))
             })
         },
         setAnnotations(items, visible = true) {
@@ -233,7 +388,7 @@ if (config && root) {
             this.userLocationMarker.bindPopup('Lokasi perangkat ini')
         },
         fitRoute(options = {}) {
-            const bounds = L.featureGroup([this.routeLayer, this.historyLayer, this.markerLayer, this.annotationLayer]).getBounds()
+            const bounds = L.featureGroup([this.routeLayer, this.historyLayer, this.markerLayer, this.destinationLayer, this.annotationLayer]).getBounds()
             if (bounds.isValid()) this.instance.fitBounds(bounds, { padding: [28, 28], maxZoom: 16, ...options })
         },
         setCamera(center, zoom = 14, animate = true) {
@@ -253,6 +408,12 @@ if (config && root) {
         },
         onMarkerSelect(handler) {
             this.markerSelectHandler = handler
+        },
+        onJourneyPointSelect(handler) {
+            this.journeyPointHandler = handler
+        },
+        onDestinationSelect(handler) {
+            this.destinationSelectHandler = handler
         },
     }
 
@@ -293,8 +454,19 @@ if (config && root) {
         activityEmpty: document.getElementById('activity-empty'),
         employeeDetail: document.getElementById('employee-detail'),
         historyStatus: document.getElementById('history-status'),
+        journeyDialog: document.getElementById('journey-dialog'),
+        journeyDialogEmployee: document.getElementById('journey-dialog-employee'),
+        journeyDay: document.getElementById('journey-day'),
+        journeyMonth: document.getElementById('journey-month'),
+        journeyYear: document.getElementById('journey-year'),
+        journeySummary: document.getElementById('journey-summary'),
+        journeyLastStatus: document.getElementById('journey-last-status'),
+        journeyTimeline: document.getElementById('journey-timeline'),
+        journeyCount: document.getElementById('journey-count'),
+        journeyPointDetail: document.getElementById('journey-point-detail'),
         assignmentMessage: document.getElementById('assignment-message'),
         mapStatus: document.getElementById('map-status'),
+        employeeDestinations: document.getElementById('employee-destinations'),
     }
     let employees = config.employees ?? []
     let places = config.places ?? []
@@ -303,6 +475,8 @@ if (config && root) {
     let targetMarker = null
     let trackingWatchId = null
     let simulationTimer = null
+    let simulationSendPromise = null
+    let simulationResetting = false
     let simulationIndex = 0
     let simulationPath = []
     let lastPositionSentAt = 0
@@ -311,10 +485,34 @@ if (config && root) {
     let placeSearchRequest = 0
     let lastGeocodeRequestAt = 0
     let employeeSearchTerm = ''
+    let currentJourney = { points: [], visits: [], events: [], assignments: [], date: null, truncated: false }
+    let selectedJourneyPoint = null
+    let journeyRequestId = 0
+    let pendingDestinationMoveId = null
     const geocodeCache = new Map()
 
     const getSelectedEmployee = () => employees.find((employee) => String(employee.id) === String(selectedEmployeeId))
     const formatTime = (date) => date ? new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit' }).format(new Date(date)) : '-'
+    const formatDate = (date) => new Intl.DateTimeFormat('id-ID', { dateStyle: 'long' }).format(new Date(`${date}T12:00:00`))
+    const formatDuration = (milliseconds) => {
+        const totalMinutes = Math.max(0, Math.floor((milliseconds || 0) / 60000))
+        const hours = Math.floor(totalMinutes / 60)
+        const minutes = totalMinutes % 60
+        if (hours === 0) return `${minutes} mnt`
+        return minutes ? `${hours} jam ${minutes} mnt` : `${hours} jam`
+    }
+    const formatDistance = (meters) => meters >= 1000
+        ? `${(meters / 1000).toFixed(2)} km`
+        : `${Math.round(meters)} m`
+    const localDateString = (date = new Date()) => {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        }).formatToParts(date)
+        const values = Object.fromEntries(parts.map((part) => [part.type, part.value]))
+        return `${values.year}-${values.month}-${values.day}`
+    }
     const relativeTime = (date) => {
         if (!date) return 'Belum ada data'
         const minutes = Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 60000))
@@ -391,7 +589,10 @@ if (config && root) {
         const liveCount = employees.filter((employee) => employee.status === 'live').length
         document.getElementById('employee-count').textContent = employees.length
         document.getElementById('live-count').textContent = liveCount
-        document.getElementById('assignment-count').textContent = employees.filter((employee) => employee.assignment).length
+        document.getElementById('assignment-count').textContent = employees.reduce(
+            (total, employee) => total + (employee.assignments?.length ?? (employee.assignment ? 1 : 0)),
+            0,
+        )
         document.getElementById('place-count').textContent = places.length
         document.getElementById('table-count').textContent = normalizedSearch
             ? `${filteredEmployees.length} dari ${employees.length} karyawan`
@@ -434,8 +635,15 @@ if (config && root) {
         elements.activityEmpty?.classList.toggle('hidden', employees.some((employee) => employee.location))
         renderEmployeeSelectors()
         MapController.setMarkers(employees)
+        const selectedEmployee = getSelectedEmployee()
+        MapController.setDestinations(selectedEmployee
+            ? (selectedEmployee.assignments ?? (selectedEmployee.assignment ? [selectedEmployee.assignment] : []))
+                .map((destination) => ({ destination, employee: selectedEmployee }))
+            : [],
+        )
         MapController.setAnnotations(places)
         renderEmployeeDetail()
+        renderEmployeeDestinations()
     }
 
     const renderEmployeeDetail = () => {
@@ -461,7 +669,299 @@ if (config && root) {
                 <div class="flex justify-between gap-3"><dt class="text-gray-500">Koordinat</dt><dd class="text-right font-medium tabular-nums text-gray-800">${location ? `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}` : '-'}</dd></div>
             </dl>
             ${location?.isSimulated ? '<p class="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[10px] text-amber-800">Data ini berasal dari mode simulasi, bukan GPS aktual.</p>' : ''}
-            <button type="button" id="show-history" class="mt-4 w-full rounded-lg bg-indigo-50 px-3 py-2.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Lihat riwayat perjalanan</button>`
+            ${config.isManager ? '<button type="button" id="show-history" class="mt-4 w-full rounded-lg bg-indigo-50 px-3 py-2.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100">Lihat Detail</button>' : ''}`
+    }
+
+    const renderEmployeeDestinations = () => {
+        if (!elements.employeeDestinations) return
+        const employee = getSelectedEmployee()
+        if (!employee) {
+            elements.employeeDestinations.innerHTML = ''
+            return
+        }
+        const assignments = employee.assignments ?? (employee.assignment ? [employee.assignment] : [])
+        elements.employeeDestinations.innerHTML = `<h3 class="text-xs font-semibold text-gray-700">Tujuan ${escapeHtml(employee.name)} <span class="font-normal text-gray-400">(${assignments.length})</span></h3>
+            ${assignments.length ? `<ul class="grid gap-2 sm:grid-cols-2">${assignments.map((destination) => `<li class="flex min-w-0 items-center gap-2 rounded-lg border border-gray-100 bg-white px-3 py-2">
+                <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-indigo-50 text-base">${destinationGlyph(destination.icon)}</span>
+                <span class="min-w-0 flex-1"><span class="block truncate text-xs font-medium text-gray-800">${escapeHtml(destination.name)}</span><span class="block truncate text-[10px] text-gray-500">${escapeHtml(destination.description || `${destination.latitude.toFixed(5)}, ${destination.longitude.toFixed(5)}`)}</span></span>
+                <button type="button" data-edit-destination="${destination.id}" class="rounded px-2 py-1 text-[10px] font-medium text-blue-700 hover:bg-blue-50">Edit</button>
+                <button type="button" data-delete-destination="${destination.id}" class="rounded px-2 py-1 text-[10px] font-medium text-red-600 hover:bg-red-50">Hapus</button>
+            </li>`).join('')}</ul>` : '<p class="text-[11px] text-gray-500">Belum ada tujuan untuk karyawan ini.</p>'}`
+    }
+
+    const savedPlaceForPoint = (point) => places
+        .map((place) => ({
+            place,
+            distance: LocationGeo.distance(
+                [point.latitude, point.longitude],
+                [place.latitude, place.longitude],
+            ),
+        }))
+        .filter((match) => match.distance <= 200)
+        .sort((a, b) => a.distance - b.distance)[0]?.place
+
+    const buildJourney = (points) => {
+        const totalDistanceMeters = points.slice(1).reduce((total, point, index) =>
+            total + LocationGeo.distance(
+                [points[index].latitude, points[index].longitude],
+                [point.latitude, point.longitude],
+            ), 0)
+        const startedAt = points[0]?.recordedAt
+        const endedAt = points.at(-1)?.recordedAt
+        const durationMs = startedAt && endedAt
+            ? Math.max(0, new Date(endedAt).getTime() - new Date(startedAt).getTime())
+            : 0
+        const groups = []
+
+        points.forEach((point, index) => {
+            const timestamp = new Date(point.recordedAt).getTime()
+            const group = groups.at(-1)
+            const center = group && [
+                group.latitudeTotal / group.points.length,
+                group.longitudeTotal / group.points.length,
+            ]
+            const closeToPrevious = group
+                && timestamp - group.lastTimestamp <= 30 * 60 * 1000
+                && LocationGeo.distance(center, [point.latitude, point.longitude]) <= 100
+
+            if (!closeToPrevious) {
+                groups.push({
+                    points: [point],
+                    startIndex: index,
+                    endIndex: index,
+                    latitudeTotal: point.latitude,
+                    longitudeTotal: point.longitude,
+                    lastTimestamp: timestamp,
+                })
+                return
+            }
+
+            group.points.push(point)
+            group.endIndex = index
+            group.latitudeTotal += point.latitude
+            group.longitudeTotal += point.longitude
+            group.lastTimestamp = timestamp
+        })
+
+        const visits = groups
+            .filter((group) => group.lastTimestamp - new Date(group.points[0].recordedAt).getTime() >= 5 * 60 * 1000)
+            .map((group) => {
+                const first = group.points[0]
+                const last = group.points.at(-1)
+                const latitude = group.latitudeTotal / group.points.length
+                const longitude = group.longitudeTotal / group.points.length
+                const savedPlace = savedPlaceForPoint({ latitude, longitude })
+                const durationMs = Math.max(0, group.lastTimestamp - new Date(first.recordedAt).getTime())
+
+                return {
+                    type: 'visit',
+                    startIndex: group.startIndex,
+                    endIndex: group.endIndex,
+                    latitude,
+                    longitude,
+                    name: savedPlace?.name ?? `Lokasi sekitar ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+                    description: savedPlace?.description ?? null,
+                    arrivedAt: first.recordedAt,
+                    departedAt: last.recordedAt,
+                    durationMs,
+                    sampleCount: group.points.length,
+                    isSimulated: group.points.some((point) => point.isSimulated),
+                }
+            })
+
+        const events = []
+        let cursor = 0
+        const addTravel = (startIndex, endIndex) => {
+            if (endIndex <= startIndex) return
+            const segment = points.slice(startIndex, endIndex + 1)
+            if (segment.length < 2) return
+            const distanceMeters = segment.slice(1).reduce((total, point, index) =>
+                total + LocationGeo.distance(
+                    [segment[index].latitude, segment[index].longitude],
+                    [point.latitude, point.longitude],
+                ), 0)
+            const durationMs = Math.max(0, new Date(segment.at(-1).recordedAt) - new Date(segment[0].recordedAt))
+            events.push({
+                type: 'travel',
+                startIndex,
+                endIndex,
+                point: segment[0],
+                from: segment[0],
+                to: segment.at(-1),
+                startedAt: segment[0].recordedAt,
+                endedAt: segment.at(-1).recordedAt,
+                distanceMeters,
+                durationMs,
+                isSimulated: segment.some((point) => point.isSimulated),
+            })
+        }
+
+        visits.forEach((visit) => {
+            addTravel(cursor, visit.startIndex)
+            events.push(visit)
+            cursor = visit.endIndex
+        })
+        addTravel(cursor, points.length - 1)
+
+        return {
+            totalDistanceMeters,
+            durationMs,
+            startedAt,
+            endedAt,
+            visits,
+            events,
+        }
+    }
+
+    const selectedDate = () => {
+        const date = new Date()
+        date.setFullYear(Number(elements.journeyYear.value), Number(elements.journeyMonth.value) - 1, Number(elements.journeyDay.value))
+        return localDateString(date)
+    }
+
+    const populateJourneyDateSelectors = () => {
+        const today = new Date()
+        const monthNames = new Intl.DateTimeFormat('id-ID', { month: 'long' })
+        elements.journeyDay.innerHTML = Array.from({ length: 31 }, (_, index) =>
+            `<option value="${index + 1}">${String(index + 1).padStart(2, '0')}</option>`,
+        ).join('')
+        elements.journeyMonth.innerHTML = Array.from({ length: 12 }, (_, index) => {
+            const month = index + 1
+            return `<option value="${month}">${monthNames.format(new Date(2020, index, 1))}</option>`
+        }).join('')
+        const currentYear = today.getFullYear()
+        elements.journeyYear.innerHTML = Array.from({ length: 51 }, (_, index) => currentYear - index)
+            .map((year) => `<option value="${year}">${year}</option>`)
+            .join('')
+        elements.journeyDay.value = String(today.getDate())
+        elements.journeyMonth.value = String(today.getMonth() + 1)
+        elements.journeyYear.value = String(currentYear)
+    }
+
+    const clampJourneyDay = () => {
+        const daysInMonth = new Date(
+            Number(elements.journeyYear.value),
+            Number(elements.journeyMonth.value),
+            0,
+        ).getDate()
+        if (Number(elements.journeyDay.value) > daysInMonth) {
+            elements.journeyDay.value = String(daysInMonth)
+        }
+    }
+
+    const changeJourneyDate = () => {
+        clampJourneyDay()
+        loadHistory()
+    }
+
+    const showJourneyPoint = (event) => {
+        const detail = elements.journeyPointDetail
+        if (!event || !detail) return
+        selectedJourneyPoint = event
+        const visit = event.visit ?? (event.type === 'visit' ? event : null)
+        const destination = event.destination
+        const point = visit
+            ? { latitude: visit.latitude, longitude: visit.longitude }
+            : destination ?? event.point ?? event.from
+        if (!point) return
+        const title = destination
+            ? `${destinationGlyph(destination.icon)} ${destination.name}`
+            : visit?.name ?? ({
+            start: 'Lokasi awal',
+            end: 'Lokasi terakhir tercatat',
+            current: event.point?.isSimulated ? 'Lokasi terkini · Simulasi' : 'Lokasi terkini · Real-time',
+        }[event.type] ?? 'Titik perjalanan')
+        const arrivedAt = destination?.visitedAt ?? visit?.arrivedAt ?? event.startedAt ?? event.point?.recordedAt ?? event.point?.updatedAt ?? event.from?.recordedAt
+        const departedAt = visit?.departedAt ?? event.endedAt ?? event.point?.recordedAt ?? event.point?.updatedAt ?? event.to?.recordedAt
+        const durationMs = visit?.durationMs ?? event.durationMs ?? 0
+
+        detail.classList.remove('hidden')
+        detail.innerHTML = `<div class="flex items-start justify-between gap-2"><h4 class="text-xs font-semibold text-gray-900">${escapeHtml(title)}</h4><button type="button" id="close-journey-point" class="text-gray-400 hover:text-gray-700" aria-label="Tutup detail">&times;</button></div>
+            ${(destination?.description ?? visit?.description) ? `<p class="mt-1 text-[10px] text-gray-600">${escapeHtml(destination?.description ?? visit.description)}</p>` : ''}
+            <dl class="mt-2 space-y-1.5 text-[10px]">
+                <div class="flex justify-between gap-3"><dt class="text-gray-500">Koordinat</dt><dd class="text-right font-medium tabular-nums text-gray-700">${point.latitude.toFixed(6)}, ${point.longitude.toFixed(6)}</dd></div>
+                ${destination ? `<div class="flex justify-between gap-3"><dt class="text-gray-500">Status tujuan</dt><dd class="text-right text-gray-700">${destination.visited ? `Dikunjungi${destination.visitedAt ? ` · ${formatTime(destination.visitedAt)}` : ''}` : 'Belum dikunjungi'}</dd></div>
+                <div class="flex justify-between gap-3"><dt class="text-gray-500">Geofence</dt><dd class="text-right text-gray-700">Radius ${destination.geofenceRadiusMeters} m</dd></div>
+                ${destination.visitIsSimulated ? '<div class="font-medium text-amber-700">Kunjungan berdasarkan data simulasi</div>' : ''}` : ''}
+                <div class="flex justify-between gap-3"><dt class="text-gray-500">Tiba / tercatat</dt><dd class="text-right text-gray-700">${arrivedAt ? formatTime(arrivedAt) : '-'}</dd></div>
+                <div class="flex justify-between gap-3"><dt class="text-gray-500">Pergi / terakhir tercatat</dt><dd class="text-right text-gray-700">${departedAt ? formatTime(departedAt) : '-'}</dd></div>
+                <div class="flex justify-between gap-3"><dt class="text-gray-500">Durasi</dt><dd class="text-right text-gray-700">${formatDuration(durationMs)}</dd></div>
+                ${event.type === 'travel' ? `<div class="flex justify-between gap-3"><dt class="text-gray-500">Jarak GPS</dt><dd class="text-right text-gray-700">${formatDistance(event.distanceMeters)}</dd></div>` : ''}
+                ${visit?.isSimulated || event.point?.isSimulated ? '<div class="font-medium text-amber-700">Data simulasi</div>' : ''}
+            </dl>`
+        document.getElementById('close-journey-point')?.addEventListener('click', () => detail.classList.add('hidden'))
+        MapController.panToJourney([point.latitude, point.longitude])
+    }
+
+    const renderJourney = (points, date, truncated = false, assignments = []) => {
+        const employee = getSelectedEmployee()
+        const summary = buildJourney(points)
+        const isToday = date === localDateString()
+        const isLive = isToday && employee?.status === 'live' && employee.location
+        const realtimePoint = isLive ? employee.location : null
+        currentJourney = { points, visits: summary.visits, events: summary.events, assignments, date, truncated }
+
+        MapController.setJourney(points, summary.visits, realtimePoint, assignments)
+        elements.journeyTimeline.replaceChildren()
+        elements.journeySummary.replaceChildren()
+        elements.journeyPointDetail.classList.add('hidden')
+        selectedJourneyPoint = null
+
+        const destinationTimeline = assignments.map((destination) => `
+            <button type="button" data-journey-destination="${destination.id}" class="block w-full rounded-lg border border-indigo-100 bg-indigo-50/50 px-3 py-2.5 text-left transition hover:border-indigo-200 hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-blue-500">
+                <span class="flex items-center justify-between gap-2"><span class="min-w-0 truncate text-[10px] font-semibold text-gray-800">${destinationGlyph(destination.icon)} ${escapeHtml(destination.name)}</span><span class="shrink-0 rounded-full ${destination.visited ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-600'} px-2 py-0.5 text-[9px] font-medium">${destination.visited ? 'Dikunjungi' : 'Belum dikunjungi'}</span></span>
+                <span class="mt-1 block text-[9px] text-gray-500">${destination.visited && destination.visitedAt ? `Tiba ${formatTime(destination.visitedAt)}` : `Tujuan admin · geofence ${destination.geofenceRadiusMeters} m`}</span>
+                ${destination.description ? `<span class="mt-1 block text-[9px] text-gray-600">${escapeHtml(destination.description)}</span>` : ''}
+                ${destination.visitIsSimulated ? '<span class="mt-1 block text-[9px] font-medium text-amber-700">Kunjungan berdasarkan data simulasi</span>' : ''}
+            </button>`).join('')
+
+        if (!points.length) {
+            elements.historyStatus.textContent = `Tidak ada titik lokasi tersimpan pada ${formatDate(date)}.`
+            elements.journeyCount.textContent = ''
+            elements.journeySummary.innerHTML = '<p class="col-span-2 rounded-lg bg-slate-50 px-3 py-4 text-center text-[11px] text-gray-500">Belum ada aktivitas GPS untuk tanggal ini.</p>'
+            elements.journeyLastStatus.innerHTML = '<span class="font-medium text-gray-700">Status lokasi:</span> Tidak ada data pada tanggal ini.'
+            elements.journeyTimeline.innerHTML = `${destinationTimeline}${assignments.length ? '' : '<p class="rounded-lg bg-slate-50 px-3 py-4 text-center text-[11px] text-gray-500">Timeline akan tersedia setelah lokasi karyawan tercatat.</p>'}`
+            return
+        }
+
+        elements.historyStatus.textContent = `${points.length}${truncated ? '+' : ''} titik GPS · ${formatDate(date)}${points.some((point) => point.isSimulated) ? ' · Termasuk data simulasi' : ''}`
+        elements.journeyCount.textContent = `${summary.events.length} aktivitas`
+        const summaryItems = [
+            ['Jarak tercatat', formatDistance(summary.totalDistanceMeters)],
+            ['Durasi tercatat', formatDuration(summary.durationMs)],
+            ['Lokasi dikunjungi', String(summary.visits.length)],
+            ['Mulai – selesai', `${formatTime(summary.startedAt)} – ${formatTime(summary.endedAt)}`],
+        ]
+        elements.journeySummary.innerHTML = summaryItems.map(([label, value]) =>
+            `<div class="rounded-lg bg-slate-50 px-3 py-2"><p class="text-[9px] text-gray-500">${label}</p><p class="mt-0.5 text-xs font-semibold text-gray-800">${value}</p></div>`,
+        ).join('')
+
+        const lastPoint = points.at(-1)
+        const lastLocation = savedPlaceForPoint(lastPoint)?.name
+            ?? `${lastPoint.latitude.toFixed(5)}, ${lastPoint.longitude.toFixed(5)}`
+        const latestStatus = isLive
+            ? (realtimePoint.isSimulated ? 'Lokasi simulasi aktif' : 'Karyawan sedang berbagi lokasi')
+            : `Terakhir tercatat ${formatTime(lastPoint.recordedAt)} · Tidak live`
+        elements.journeyLastStatus.innerHTML = `<span class="font-medium text-gray-700">Status lokasi terakhir:</span> ${escapeHtml(latestStatus)} <span class="block mt-1 text-gray-500">${escapeHtml(lastLocation)}</span>`
+
+        if (truncated) {
+            elements.historyStatus.textContent += ' · Riwayat melebihi batas tampilan 5.000 titik.'
+        }
+
+        elements.journeyTimeline.innerHTML = destinationTimeline + summary.events.map((event, index) => {
+            if (event.type === 'visit') {
+                return `<button type="button" data-journey-event="${index}" class="block w-full rounded-lg border border-gray-100 px-3 py-2.5 text-left transition hover:border-amber-200 hover:bg-amber-50/60 focus-visible:outline-2 focus-visible:outline-blue-500">
+                    <span class="flex items-center justify-between gap-2"><span class="text-[10px] font-semibold text-gray-800">${escapeHtml(event.name)}</span><span class="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-medium text-amber-700">Kunjungan</span></span>
+                    <span class="mt-1.5 flex flex-wrap justify-between gap-x-2 text-[9px] text-gray-500"><span>Tiba ${formatTime(event.arrivedAt)} · Pergi ${formatTime(event.departedAt)}</span><span>${formatDuration(event.durationMs)}</span></span>
+                    ${event.isSimulated ? '<span class="mt-1 block text-[9px] font-medium text-amber-700">Data simulasi</span>' : ''}
+                </button>`
+            }
+            return `<button type="button" data-journey-event="${index}" class="block w-full rounded-lg border border-gray-100 bg-slate-50/70 px-3 py-2.5 text-left transition hover:border-blue-200 hover:bg-blue-50/60 focus-visible:outline-2 focus-visible:outline-blue-500">
+                <span class="flex items-center justify-between gap-2"><span class="text-[10px] font-semibold text-gray-800">Perjalanan GPS</span><span class="shrink-0 text-[9px] font-medium text-blue-700">${formatDistance(event.distanceMeters)}</span></span>
+                <span class="mt-1.5 flex flex-wrap justify-between gap-x-2 text-[9px] text-gray-500"><span>${formatTime(event.startedAt)} – ${formatTime(event.endedAt)}</span><span>${formatDuration(event.durationMs)}</span></span>
+                ${event.isSimulated ? '<span class="mt-1 block text-[9px] font-medium text-amber-700">Data simulasi</span>' : ''}
+            </button>`
+        }).join('')
     }
 
     const setTarget = (point, marker = true) => {
@@ -501,24 +1001,35 @@ if (config && root) {
         }
     }
 
-    const loadHistory = async () => {
+    const loadHistory = async (fitRoute = false) => {
         const employee = getSelectedEmployee()
-        MapController.setRoute([], { history: true })
-        if (!employee) return
+        const requestId = ++journeyRequestId
+        if (!employee) {
+            currentJourney = { points: [], visits: [], events: [], assignments: [], date: selectedDate(), truncated: false }
+            renderJourney([], selectedDate())
+            elements.historyStatus.textContent = 'Pilih karyawan untuk melihat riwayat.'
+            return
+        }
+        MapController.setJourney([], [], null, [])
         elements.historyStatus.textContent = 'Memuat riwayat lokasi…'
+        const params = new URLSearchParams({ date: selectedDate() })
         try {
-            const response = await request(`${config.routes.historyPrefix}${employee.id}/history`)
-            const points = response.points.map((point) => [point.latitude, point.longitude])
-            MapController.setRoute(points, { history: true })
-            elements.historyStatus.textContent = points.length
-                ? `${points.length} titik riwayat ditampilkan · garis biru muda`
-                : 'Belum ada riwayat lokasi untuk karyawan ini.'
+            const response = await request(`${config.routes.historyPrefix}${employee.id}/history?${params}`)
+            if (requestId !== journeyRequestId) return
+            renderJourney(response.points, response.date, response.truncated, response.assignments ?? [])
+            if (fitRoute && (response.points.length || response.assignments?.length)) {
+                window.requestAnimationFrame(() => {
+                    MapController.invalidateJourneyMap()
+                    MapController.fitJourneyRoute()
+                })
+            }
         } catch (error) {
+            if (requestId !== journeyRequestId) return
             elements.historyStatus.textContent = `Riwayat gagal dimuat: ${error.message}`
         }
     }
 
-    const selectEmployee = (id, shouldLoadHistory = true) => {
+    const selectEmployee = (id) => {
         const changed = String(selectedEmployeeId ?? '') !== String(id ?? '')
         selectedEmployeeId = id
         if (changed) {
@@ -537,12 +1048,16 @@ if (config && root) {
                 { isSimulated: employee.location.isSimulated },
             )
         }
-        if (employee?.assignment) {
-            setTarget({ ...employee.assignment, ephemeral: true })
+        const primaryAssignment = employee?.assignments?.[0] ?? employee?.assignment
+        if (primaryAssignment) {
+            setTarget({ ...primaryAssignment, ephemeral: true })
         } else if (employee?.location) {
             MapController.panTo([employee.location.latitude, employee.location.longitude])
         }
-        if (shouldLoadHistory) loadHistory()
+        if (changed && !elements.journeyDialog.classList.contains('hidden')) {
+            elements.journeyDialogEmployee.textContent = employee?.name ?? 'Pilih karyawan untuk melihat riwayat.'
+            loadHistory(true)
+        }
     }
 
     const refreshTracking = async () => {
@@ -550,6 +1065,22 @@ if (config && root) {
             const response = await request(config.routes.data)
             employees = response.employees
             renderEmployees()
+            if (currentJourney.date === localDateString()) {
+                const employee = getSelectedEmployee()
+                const realtimePoint = employee?.status === 'live'
+                    ? { ...employee.location, recordedAt: employee.location.updatedAt }
+                    : null
+                MapController.setCurrentJourneyLocation(realtimePoint)
+                if (employee && currentJourney.points.length) {
+                    const lastPoint = currentJourney.points.at(-1)
+                    const lastLocation = savedPlaceForPoint(lastPoint)?.name
+                        ?? `${lastPoint.latitude.toFixed(5)}, ${lastPoint.longitude.toFixed(5)}`
+                    const latestStatus = realtimePoint
+                        ? (realtimePoint.isSimulated ? 'Lokasi simulasi aktif' : 'Karyawan sedang berbagi lokasi')
+                        : `Terakhir tercatat ${formatTime(lastPoint.recordedAt)} · Tidak live`
+                    elements.journeyLastStatus.innerHTML = `<span class="font-medium text-gray-700">Status lokasi terakhir:</span> ${escapeHtml(latestStatus)} <span class="block mt-1 text-gray-500">${escapeHtml(lastLocation)}</span>`
+                }
+            }
             if (targetPoint) await updateRoute()
             elements.mapStatus.textContent = `Pembaruan otomatis setiap 10 detik · ${new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date())}`
         } catch (error) {
@@ -585,13 +1116,186 @@ if (config && root) {
         if (event.target.id === 'place-dialog') closePlaceDialog()
     })
 
+    const closeDestinationDialog = () => {
+        const dialog = document.getElementById('destination-dialog')
+        dialog?.classList.add('hidden')
+        dialog?.classList.remove('flex')
+    }
+    const openDestinationDialog = (destination = null, mode = 'edit') => {
+        const employee = getSelectedEmployee()
+        if (!employee) {
+            elements.assignmentMessage.textContent = 'Pilih karyawan terlebih dahulu.'
+            return
+        }
+        if (destination) {
+            targetPoint = { ...destination, ephemeral: true }
+        }
+        if (!targetPoint) {
+            elements.assignmentMessage.textContent = 'Pilih lokasi dari peta atau pencarian terlebih dahulu.'
+            return
+        }
+        const form = document.getElementById('destination-form')
+        form.reset()
+        document.getElementById('destination-id').value = destination?.id ?? ''
+        document.getElementById('destination-name').value = destination?.name ?? (targetPoint.name === 'Titik pilihan di peta' ? '' : targetPoint.name)
+        document.getElementById('destination-description').value = destination?.description ?? targetPoint.description ?? ''
+        document.getElementById('destination-icon').value = destination?.icon ?? 'pin'
+        document.getElementById('destination-latitude').value = targetPoint.latitude
+        document.getElementById('destination-longitude').value = targetPoint.longitude
+        document.getElementById('destination-coordinates').textContent = destination
+            ? `${destinationGlyph(destination.icon)} ${destination.name}`
+            : 'Koordinat diambil otomatis dari titik yang dipilih pada peta atau hasil pencarian.'
+        document.getElementById('destination-error').textContent = ''
+        const isView = mode === 'view'
+        document.getElementById('destination-dialog-title').textContent = isView
+            ? 'Detail tujuan lokasi'
+            : destination ? 'Edit tujuan karyawan' : 'Tambah tujuan karyawan'
+        document.getElementById('destination-preview').classList.toggle('hidden', !isView)
+        document.getElementById('destination-fields').classList.toggle('hidden', isView)
+        document.getElementById('destination-assigned-employee').classList.toggle('hidden', isView)
+        document.getElementById('destination-assigned-employee').textContent = isView ? `Ditugaskan kepada: ${employee.name}` : ''
+        document.getElementById('destination-preview-name').textContent = `${destinationGlyph(destination?.icon)} ${destination?.name ?? ''}`
+        document.getElementById('destination-preview-employee').textContent = `Ditugaskan kepada: ${employee.name}`
+        const description = document.getElementById('destination-preview-description')
+        description.textContent = destination?.description ?? ''
+        description.classList.toggle('hidden', !destination?.description)
+        document.getElementById('destination-preview-coordinates').textContent = `${targetPoint.latitude.toFixed(6)}, ${targetPoint.longitude.toFixed(6)}`
+        document.getElementById('destination-edit-coordinate-hint').classList.toggle('hidden', !destination || isView)
+        document.getElementById('destination-edit-coordinate-hint').textContent = 'Koordinat saat ini dipertahankan. Gunakan “Pilih titik baru di peta” untuk memindahkan lokasi.'
+        document.getElementById('move-destination').classList.toggle('hidden', !destination || isView)
+        document.getElementById('edit-destination-dialog').classList.toggle('hidden', !isView)
+        document.getElementById('delete-destination-dialog').classList.toggle('hidden', !isView)
+        document.getElementById('save-destination').classList.toggle('hidden', isView)
+        document.getElementById('cancel-destination').textContent = isView ? 'Tutup' : 'Batal'
+        document.getElementById('destination-dialog').classList.remove('hidden')
+        document.getElementById('destination-dialog').classList.add('flex')
+        if (!isView) document.getElementById('destination-name').focus()
+    }
+    ;['close-destination-dialog', 'cancel-destination'].forEach((id) =>
+        document.getElementById(id)?.addEventListener('click', closeDestinationDialog),
+    )
+    document.getElementById('destination-dialog')?.addEventListener('click', (event) => {
+        if (event.target.id === 'destination-dialog') closeDestinationDialog()
+    })
+    document.getElementById('edit-destination-dialog')?.addEventListener('click', () => {
+        const employee = getSelectedEmployee()
+        const id = document.getElementById('destination-id').value
+        const destination = employee?.assignments?.find((item) => String(item.id) === String(id))
+        if (destination) openDestinationDialog(destination)
+    })
+    document.getElementById('move-destination')?.addEventListener('click', () => {
+        pendingDestinationMoveId = document.getElementById('destination-id').value
+        closeDestinationDialog()
+        elements.assignmentMessage.textContent = 'Klik titik baru pada peta untuk memindahkan tujuan.'
+    })
+    document.getElementById('delete-destination-dialog')?.addEventListener('click', async () => {
+        const employee = getSelectedEmployee()
+        const id = document.getElementById('destination-id').value
+        const destination = employee?.assignments?.find((item) => String(item.id) === String(id))
+        if (destination) await deleteDestination(employee, destination)
+    })
+    document.getElementById('assign-route')?.addEventListener('click', () => openDestinationDialog())
+    document.getElementById('destination-form')?.addEventListener('submit', async (event) => {
+        event.preventDefault()
+        const employee = getSelectedEmployee()
+        if (!employee || !targetPoint) return
+        const id = document.getElementById('destination-id').value
+        const data = {
+            name: document.getElementById('destination-name').value.trim(),
+            description: document.getElementById('destination-description').value.trim() || null,
+            icon: document.getElementById('destination-icon').value,
+            latitude: Number(document.getElementById('destination-latitude').value),
+            longitude: Number(document.getElementById('destination-longitude').value),
+            ...(id ? {} : { employee_id: employee.id }),
+        }
+        const errorElement = document.getElementById('destination-error')
+        const button = event.currentTarget.querySelector('[type="submit"]')
+        button.disabled = true
+        try {
+            const response = await request(id
+                ? `${config.routes.assignmentPrefix}${id}`
+                : config.routes.assignment, {
+                method: id ? 'PUT' : 'POST',
+                body: JSON.stringify(data),
+            })
+            const assignments = employee.assignments ?? (employee.assignment ? [employee.assignment] : [])
+            if (id) {
+                employee.assignments = assignments.map((item) => String(item.id) === String(id) ? response.assignment : item)
+            } else {
+                employee.assignments = [...assignments, response.assignment]
+            }
+            employee.assignment = employee.assignments[0] ?? null
+            targetPoint = { ...response.assignment, ephemeral: true }
+            elements.assignmentMessage.textContent = `Tujuan ${employee.name} ${id ? 'diperbarui' : 'ditambahkan'}: ${response.assignment.name}`
+            closeDestinationDialog()
+            renderEmployees()
+            setTarget(targetPoint)
+        } catch (error) {
+            errorElement.textContent = error.message
+        } finally {
+            button.disabled = false
+        }
+    })
+    elements.employeeDestinations?.addEventListener('click', async (event) => {
+        const employee = getSelectedEmployee()
+        const editButton = event.target.closest('[data-edit-destination]')
+        if (editButton && employee) {
+            const destination = (employee.assignments ?? []).find(
+                (item) => String(item.id) === editButton.dataset.editDestination,
+            )
+            if (destination) openDestinationDialog(destination)
+            return
+        }
+        const deleteButton = event.target.closest('[data-delete-destination]')
+        if (!deleteButton || !employee) return
+        const destination = (employee.assignments ?? []).find(
+            (item) => String(item.id) === deleteButton.dataset.deleteDestination,
+        )
+        if (!destination) return
+        await deleteDestination(employee, destination)
+    })
+
+    const deleteDestination = async (employee, destination) => {
+        if (!window.confirm(`Hapus tujuan "${destination.name}" untuk ${employee.name}?`)) return
+        try {
+            await request(`${config.routes.assignmentPrefix}${destination.id}`, { method: 'DELETE' })
+            employee.assignments = employee.assignments.filter((item) => String(item.id) !== String(destination.id))
+            employee.assignment = employee.assignments[0] ?? null
+            closeDestinationDialog()
+            if (String(targetPoint?.id ?? '') === String(destination.id)) {
+                targetPoint = employee.assignment ? { ...employee.assignment, ephemeral: true } : null
+                if (!targetPoint) MapController.setRoute([], { history: false })
+            }
+            elements.assignmentMessage.textContent = `Tujuan ${destination.name} dihapus.`
+            renderEmployees()
+            if (targetPoint) setTarget(targetPoint, false)
+        } catch (error) {
+            elements.assignmentMessage.textContent = `Tujuan gagal dihapus: ${error.message}`
+        }
+    }
+
     MapController.initialize('tracking-map', { center: [-7.4243, 109.2302], zoom: 14 })
     MapController.instance.invalidateSize()
     MapController.onMarkerSelect((id) => selectEmployee(id))
+    MapController.onDestinationSelect(({ destination, employee }) => {
+        selectEmployee(employee.id)
+        openDestinationDialog(destination, 'view')
+    })
     MapController.onMapClick(async (coordinate) => {
         if (!config.isManager) return
         const point = { latitude: coordinate[0], longitude: coordinate[1], name: 'Titik pilihan di peta', ephemeral: true }
+        const movingDestinationId = pendingDestinationMoveId
+        pendingDestinationMoveId = null
         setTarget(point)
+        if (movingDestinationId) {
+            const employee = getSelectedEmployee()
+            const destination = employee?.assignments?.find((item) => String(item.id) === String(movingDestinationId))
+            if (destination) {
+                openDestinationDialog({ ...destination, latitude: point.latitude, longitude: point.longitude })
+                elements.assignmentMessage.textContent = `Titik baru dipilih untuk ${destination.name}; simpan perubahan untuk menerapkannya.`
+                return
+            }
+        }
         elements.assignmentMessage.textContent = 'Titik tujuan dipilih dari peta.'
         try {
             const result = await GeocodingAPI.reverse(coordinate)
@@ -622,9 +1326,57 @@ if (config && root) {
         }
     })
 
-    document.getElementById('show-history')?.addEventListener('click', loadHistory)
+    elements.employeeDetail.addEventListener('click', (event) => {
+        if (!event.target.closest('#show-history')) return
+        const employee = getSelectedEmployee()
+        if (!employee) return
+        elements.journeyDialogEmployee.textContent = employee.name
+        elements.journeyDialog.classList.remove('hidden')
+        elements.journeyDialog.classList.add('flex')
+        MapController.initializeJourneyMap('journey-map')
+        window.requestAnimationFrame(() => MapController.invalidateJourneyMap())
+        loadHistory(true)
+    })
+    const closeJourneyDialog = () => {
+        elements.journeyDialog.classList.add('hidden')
+        elements.journeyDialog.classList.remove('flex')
+    }
+    document.getElementById('close-journey-dialog').addEventListener('click', closeJourneyDialog)
+    elements.journeyDialog.addEventListener('click', (event) => {
+        if (event.target === elements.journeyDialog) closeJourneyDialog()
+    })
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && !elements.journeyDialog.classList.contains('hidden')) {
+            closeJourneyDialog()
+        }
+    })
     elements.employeeSelect?.addEventListener('change', (event) => {
         selectEmployee(event.target.value || null)
+    })
+    elements.journeyTimeline.addEventListener('click', (event) => {
+        const destinationButton = event.target.closest('[data-journey-destination]')
+        if (destinationButton) {
+            const destination = currentJourney.assignments.find(
+                (item) => String(item.id) === destinationButton.dataset.journeyDestination,
+            )
+            if (destination) showJourneyPoint({ type: 'destination', destination })
+            return
+        }
+        const button = event.target.closest('[data-journey-event]')
+        if (button) showJourneyPoint(currentJourney.events[Number(button.dataset.journeyEvent)])
+    })
+    MapController.onJourneyPointSelect(showJourneyPoint)
+
+    populateJourneyDateSelectors()
+    elements.journeyDay.addEventListener('change', changeJourneyDate)
+    elements.journeyMonth.addEventListener('change', changeJourneyDate)
+    elements.journeyYear.addEventListener('change', changeJourneyDate)
+    document.getElementById('journey-today').addEventListener('click', () => {
+        const today = new Date()
+        elements.journeyDay.value = String(today.getDate())
+        elements.journeyMonth.value = String(today.getMonth() + 1)
+        elements.journeyYear.value = String(today.getFullYear())
+        loadHistory()
     })
 
     const savedPlaceToggle = document.getElementById('saved-place-toggle')
@@ -789,35 +1541,6 @@ if (config && root) {
         }
     })
 
-    document.getElementById('assign-route')?.addEventListener('click', async () => {
-        const employee = getSelectedEmployee()
-        if (!employee || !targetPoint) {
-            elements.assignmentMessage.textContent = 'Pilih karyawan dan tujuan terlebih dahulu.'
-            return
-        }
-        const button = document.getElementById('assign-route')
-        button.disabled = true
-        try {
-            const response = await request(config.routes.assignment, {
-                method: 'POST',
-                body: JSON.stringify({
-                    employee_id: employee.id,
-                    name: targetPoint.name,
-                    latitude: targetPoint.latitude,
-                    longitude: targetPoint.longitude,
-                }),
-            })
-            employee.assignment = response.assignment
-            elements.assignmentMessage.textContent = `Tujuan ${employee.name} diperbarui: ${response.assignment.name}`
-            renderEmployees()
-            await updateRoute()
-        } catch (error) {
-            elements.assignmentMessage.textContent = `Tujuan gagal disimpan: ${error.message}`
-        } finally {
-            button.disabled = false
-        }
-    })
-
     document.getElementById('refresh-map').addEventListener('click', () => refreshTracking())
     document.getElementById('fit-map').addEventListener('click', () => MapController.fitRoute())
     document.getElementById('recenter-map').addEventListener('click', async (event) => {
@@ -950,13 +1673,14 @@ if (config && root) {
             return
         }
 
-        selectEmployee(employee.id, false)
+        selectEmployee(employee.id)
         simulationPath = makeSimulationPath(employee)
         simulationIndex = 0
         button.textContent = 'Hentikan simulasi'
         button.classList.replace('bg-gray-900', 'bg-red-600')
         status.textContent = `Mensimulasikan pergerakan ${employee.name} · setiap 3 detik`
         const sendSimulationPoint = async () => {
+            if (simulationResetting) return
             const [latitude, longitude] = simulationPath[simulationIndex % simulationPath.length]
             simulationIndex += 1
             MapController.setVehicle([latitude, longitude], { isSimulated: true })
@@ -974,8 +1698,46 @@ if (config && root) {
                 button.classList.replace('bg-red-600', 'bg-gray-900')
             }
         }
-        await sendSimulationPoint()
-        simulationTimer = setInterval(sendSimulationPoint, 3000)
+        const queueSimulationPoint = () => {
+            if (simulationResetting || simulationSendPromise) return simulationSendPromise
+            simulationSendPromise = sendSimulationPoint().finally(() => {
+                simulationSendPromise = null
+            })
+            return simulationSendPromise
+        }
+        await queueSimulationPoint()
+        if (!simulationResetting) simulationTimer = setInterval(queueSimulationPoint, 3000)
+    })
+
+    document.getElementById('reset-simulation')?.addEventListener('click', async (event) => {
+        const button = event.currentTarget
+        const status = document.getElementById('simulation-status')
+        if (!window.confirm('Hapus seluruh riwayat dan titik GPS simulasi? Data GPS asli, karyawan, akun, dan tujuan tidak akan dihapus.')) return
+        button.disabled = true
+        simulationResetting = true
+        if (simulationTimer) {
+            clearInterval(simulationTimer)
+            simulationTimer = null
+        }
+        const toggle = document.getElementById('toggle-simulation')
+        toggle.disabled = true
+        try {
+            if (simulationSendPromise) await simulationSendPromise
+            const result = await request(config.routes.simulationReset, { method: 'DELETE' })
+            status.textContent = `${result.deleted} titik GPS simulasi dihapus. Data asli dan data master tetap aman.`
+            await refreshTracking()
+            if (!elements.journeyDialog.classList.contains('hidden')) await loadHistory(true)
+        } catch (error) {
+            status.textContent = `Reset simulasi gagal: ${error.message}`
+        } finally {
+            toggle.textContent = 'Mulai simulasi'
+            toggle.classList.replace('bg-red-600', 'bg-gray-900')
+            button.disabled = false
+            toggle.disabled = false
+            simulationPath = []
+            simulationIndex = 0
+            simulationResetting = false
+        }
     })
 
     renderPlaces()

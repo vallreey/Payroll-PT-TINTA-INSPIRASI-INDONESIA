@@ -9,6 +9,7 @@
               integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
         <style>
             #tracking-map { min-height: 390px; height: clamp(390px, 52vh, 560px); }
+            #journey-map { min-height: 300px; height: 45vh; }
             #map-shell:fullscreen { display: flex; flex-direction: column; padding: 1rem; background: #f5f6fb; }
             #map-shell:fullscreen #tracking-map { flex: 1; min-height: 0; height: auto; }
             #map-shell:fullscreen > .map-legend { flex: none; }
@@ -16,6 +17,7 @@
             .employee-pin.is-offline { background: #94a3b8; }
             .leaflet-popup-content-wrapper { border-radius: 12px; }
             .leaflet-popup-content { margin: 10px 14px; font: 12px Poppins, sans-serif; }
+            .destination-tooltip { max-width: 180px; overflow: hidden; text-overflow: ellipsis; font: 600 11px Poppins, sans-serif; }
         </style>
     @endpush
 
@@ -30,11 +32,13 @@
                 'historyPrefix' => url('/tracking-lokasi/karyawan').'/',
                 'position' => route('tracking.position'),
                 'assignment' => route('tracking.assignment'),
+                'assignmentPrefix' => url('/tracking-lokasi/assignment').'/',
                 'places' => route('tracking.places.store'),
                 'search' => route('tracking.search'),
                 'reverse' => route('tracking.reverse'),
                 'route' => route('tracking.route'),
                 'simulationPrefix' => url('/tracking-lokasi/simulation').'/',
+                'simulationReset' => route('tracking.simulation.reset'),
             ],
         ]) }};
     </script>
@@ -108,9 +112,10 @@
                             <button id="save-place-open" type="button" class="rounded-lg border border-blue-200 px-3 py-2.5 text-xs font-medium text-blue-700 hover:bg-blue-50">+ Simpan lokasi</button>
                         </div>
                         <div class="flex flex-wrap items-center gap-2">
-                            <button id="assign-route" type="button" class="rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">Tetapkan tujuan karyawan</button>
+                            <button id="assign-route" type="button" class="rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">Tambah tujuan karyawan</button>
                             <span id="assignment-message" class="text-xs text-gray-500" aria-live="polite">Pilih karyawan dan tujuan, atau klik peta untuk memilih titik.</span>
                         </div>
+                        <div id="employee-destinations" class="space-y-2" aria-live="polite"></div>
                     @else
                         <div class="flex flex-wrap items-center gap-3 rounded-xl bg-blue-50 p-3">
                             <span class="size-2.5 rounded-full bg-blue-500"></span>
@@ -127,9 +132,13 @@
                     </div>
                     <div id="tracking-map" role="application" aria-label="Peta interaktif OpenStreetMap"></div>
                 <div class="map-legend flex flex-wrap items-center gap-4 border-t border-gray-100 px-4 py-3 text-[11px] text-gray-500 sm:px-5">
-                    <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-blue-600"></span>Karyawan online</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-green-600"></span>Mulai</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-amber-500"></span>Kunjungan</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-red-600"></span>Terakhir tercatat</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-violet-600"></span>Live</span>
                     <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-gray-400"></span>Offline</span>
-                    <span class="inline-flex items-center gap-1.5"><img src="{{ asset('images/lokasi2.png') }}" alt="" class="size-3.5">Tujuan / lokasi tersimpan</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="grid size-4 place-items-center rounded-full bg-indigo-600 text-[10px] text-white">🎯</span>Tujuan admin</span>
+                    <span class="inline-flex items-center gap-1.5"><img src="{{ asset('images/lokasi2.png') }}" alt="" class="size-3.5">Lokasi tersimpan</span>
                     <span class="ml-auto">Peta © OpenStreetMap</span>
                 </div>
                 </div>
@@ -158,6 +167,7 @@
                             <label class="sr-only" for="simulation-employee">Karyawan simulasi</label>
                             <select id="simulation-employee" class="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs"></select>
                             <button id="toggle-simulation" type="button" class="shrink-0 rounded-lg bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-700">Mulai simulasi</button>
+                            <button id="reset-simulation" type="button" class="shrink-0 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50">Reset Simulasi</button>
                         </div>
                         <p id="simulation-status" class="mt-2 text-[11px] text-gray-500" aria-live="polite">Pilih karyawan untuk memulai.</p>
                     </section>
@@ -192,9 +202,63 @@
                     <span id="detail-status" class="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-medium text-gray-500">Belum dipilih</span>
                 </div>
                 <div id="employee-detail" class="mt-4"></div>
-                <div id="history-status" class="mt-3 text-[11px] text-gray-500" aria-live="polite"></div>
-                <p class="mt-3 border-t border-gray-100 pt-3 text-[10px] leading-4 text-gray-400">Riwayat menampilkan maksimal 300 titik lokasi terbaru. Lokasi simulasi ditandai sebagai data uji.</p>
             </section>
+        </section>
+    </div>
+
+    <div id="journey-dialog" class="fixed inset-0 z-[1100] hidden items-center justify-center bg-slate-900/50 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="journey-dialog-title">
+        <section class="flex max-h-[95vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <header class="flex items-start justify-between gap-4 border-b border-gray-100 px-4 py-4 sm:px-6">
+                <div class="min-w-0">
+                    <h2 id="journey-dialog-title" class="truncate text-base font-semibold text-gray-900">Riwayat perjalanan</h2>
+                    <p id="journey-dialog-employee" class="mt-1 truncate text-xs text-gray-500">Pilih karyawan untuk melihat riwayat.</p>
+                </div>
+                <button id="close-journey-dialog" type="button" aria-label="Tutup riwayat perjalanan" class="grid size-9 shrink-0 place-items-center rounded-lg text-xl text-gray-400 hover:bg-gray-100 hover:text-gray-700">&times;</button>
+            </header>
+            <div class="overflow-y-auto p-4 sm:p-6">
+                <div class="mb-4 flex flex-wrap items-end gap-2">
+                    <div>
+                        <label for="journey-day" class="mb-1 block text-[10px] font-medium text-gray-600">Tanggal</label>
+                        <select id="journey-day" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"></select>
+                    </div>
+                    <div>
+                        <label for="journey-month" class="mb-1 block text-[10px] font-medium text-gray-600">Bulan</label>
+                        <select id="journey-month" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"></select>
+                    </div>
+                    <div>
+                        <label for="journey-year" class="mb-1 block text-[10px] font-medium text-gray-600">Tahun</label>
+                        <select id="journey-year" class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs text-gray-700 focus:border-blue-500 focus:outline-none"></select>
+                    </div>
+                    <button id="journey-today" type="button" class="rounded-lg border border-blue-100 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50">Hari ini</button>
+                    <p id="history-status" class="ml-auto self-center text-[10px] text-gray-500" aria-live="polite">Pilih tanggal untuk memuat riwayat.</p>
+                </div>
+
+                <div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(280px,.8fr)]">
+                    <div class="min-w-0 overflow-hidden rounded-xl border border-gray-100">
+                        <div id="journey-map" role="application" aria-label="Peta riwayat perjalanan karyawan"></div>
+                        <div class="flex flex-wrap gap-x-4 gap-y-2 border-t border-gray-100 px-3 py-2.5 text-[10px] text-gray-500">
+                            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-green-600"></span>Awal</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-amber-500"></span>Kunjungan</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-red-600"></span>Akhir</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-full bg-violet-600"></span>Live</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="grid size-4 place-items-center rounded-full bg-indigo-600 text-[10px] text-white">🎯</span>Tujuan admin</span>
+                            <span class="ml-auto">Polyline GPS tersimpan</span>
+                        </div>
+                    </div>
+
+                    <div class="min-w-0">
+                        <div id="journey-summary" class="grid grid-cols-2 gap-2"></div>
+                        <div id="journey-last-status" class="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-[10px] text-gray-600"></div>
+                        <div class="mt-4 flex items-center justify-between">
+                            <h3 class="text-xs font-semibold text-gray-800">Timeline perjalanan</h3>
+                            <span id="journey-count" class="text-[10px] text-gray-400"></span>
+                        </div>
+                        <div id="journey-timeline" class="mt-2 max-h-[35vh] space-y-2 overflow-y-auto"></div>
+                        <div id="journey-point-detail" class="mt-3 hidden rounded-xl border border-blue-100 bg-blue-50/70 p-3"></div>
+                    </div>
+                </div>
+                <p class="mt-4 border-t border-gray-100 pt-3 text-[10px] leading-4 text-gray-400">Jarak dihitung dari garis lurus antar-sampel GPS yang tersimpan. Tujuan admin ditandai dengan ikon khusus dan dianggap dikunjungi jika titik GPS berada dalam radius 100 m; waktu kunjungan mengikuti sampel GPS. Data simulasi diberi label terpisah.</p>
+            </div>
         </section>
     </div>
 
@@ -215,6 +279,52 @@
                 <div class="flex justify-end gap-2">
                     <button id="cancel-place" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-xs font-medium text-gray-700">Batal</button>
                     <button type="submit" class="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700">Simpan di peta</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="destination-dialog" class="fixed inset-0 z-[1000] hidden items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true" aria-labelledby="destination-dialog-title">
+            <form id="destination-form" class="w-full max-w-md space-y-4 rounded-2xl bg-white p-5 shadow-xl">
+                <div class="flex items-start justify-between gap-4">
+                    <div><h2 id="destination-dialog-title" class="font-semibold text-gray-900">Tambah tujuan karyawan</h2><p id="destination-coordinates" class="mt-1 text-xs text-gray-500"></p></div>
+                    <button id="close-destination-dialog" type="button" aria-label="Tutup" class="rounded-lg px-2 text-xl leading-6 text-gray-400 hover:bg-gray-100">&times;</button>
+                </div>
+                <input id="destination-id" type="hidden">
+                <input id="destination-latitude" name="latitude" type="hidden">
+                <input id="destination-longitude" name="longitude" type="hidden">
+                <div id="destination-preview" class="hidden rounded-xl bg-slate-50 p-4">
+                    <p id="destination-preview-name" class="text-sm font-semibold text-gray-900"></p>
+                    <p id="destination-preview-employee" class="mt-1 text-xs text-gray-600"></p>
+                    <p id="destination-preview-description" class="mt-2 hidden text-xs leading-5 text-gray-600"></p>
+                    <p id="destination-preview-coordinates" class="mt-2 text-[10px] tabular-nums text-gray-400"></p>
+                </div>
+                <div id="destination-fields" class="hidden space-y-4">
+                    <label class="block text-xs font-medium text-gray-700">Nama lokasi
+                        <input id="destination-name" name="name" required maxlength="120" class="mt-1.5 w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none">
+                    </label>
+                    <label class="block text-xs font-medium text-gray-700">Ikon lokasi
+                        <select id="destination-icon" name="icon" class="mt-1.5 w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none">
+                            <option value="pin">📍 Pin</option>
+                            <option value="office">🏢 Kantor</option>
+                            <option value="warehouse">🏭 Gudang</option>
+                            <option value="store">🏪 Toko</option>
+                            <option value="meeting">🤝 Pertemuan</option>
+                            <option value="target">🎯 Target</option>
+                        </select>
+                    </label>
+                    <label class="block text-xs font-medium text-gray-700">Catatan (opsional)
+                        <textarea id="destination-description" name="description" maxlength="500" rows="2" class="mt-1.5 w-full resize-y rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"></textarea>
+                    </label>
+                    <p id="destination-edit-coordinate-hint" class="hidden rounded-lg bg-blue-50 px-3 py-2 text-[10px] text-blue-700"></p>
+                    <button id="move-destination" type="button" class="hidden rounded-lg border border-blue-200 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50">Pilih titik baru di peta</button>
+                </div>
+                <p id="destination-assigned-employee" class="hidden text-xs text-gray-600"></p>
+                <p id="destination-error" class="text-xs text-red-600" aria-live="polite"></p>
+                <div class="flex flex-wrap justify-end gap-2">
+                    <button id="delete-destination-dialog" type="button" class="hidden mr-auto rounded-lg border border-red-200 px-4 py-2 text-xs font-medium text-red-700 hover:bg-red-50">Hapus</button>
+                    <button id="edit-destination-dialog" type="button" class="hidden rounded-lg border border-blue-200 px-4 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50">Edit</button>
+                    <button id="cancel-destination" type="button" class="rounded-lg border border-gray-200 px-4 py-2 text-xs font-medium text-gray-700">Tutup</button>
+                    <button id="save-destination" type="submit" class="hidden rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700">Simpan tujuan</button>
                 </div>
             </form>
         </div>

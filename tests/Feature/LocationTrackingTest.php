@@ -90,9 +90,21 @@ class LocationTrackingTest extends TestCase
         $this->actingAs($hrd->user)
             ->get(route('tracking.index'))
             ->assertOk()
+            ->assertSee('journey-dialog')
+            ->assertSee('journey-day')
+            ->assertSee('journey-month')
+            ->assertSee('journey-year')
+            ->assertSee('journey-map')
+            ->assertSee('destination-dialog')
+            ->assertSee('employee-destinations')
+            ->assertSee('destination-preview-employee')
+            ->assertSee('Pilih titik baru di peta')
+            ->assertDontSee('for="destination-latitude"', false)
+            ->assertDontSee('for="destination-longitude"', false)
             ->assertSee('saved-place-search')
             ->assertSee('search-results')
-            ->assertSee('Simulasi lokasi');
+            ->assertSee('Simulasi lokasi')
+            ->assertSee('Reset Simulasi');
 
         $placeResponse = $this->actingAs($hrd->user)
             ->postJson(route('tracking.places.store'), [
@@ -111,18 +123,29 @@ class LocationTrackingTest extends TestCase
         $this->postJson(route('tracking.assignment'), [
             'employee_id' => $employee->id_karyawan,
             'name' => $place->nama_lokasi,
+            'description' => 'Pintu utama',
+            'icon' => 'warehouse',
             'latitude' => $place->latitude,
             'longitude' => $place->longitude,
-        ])->assertOk()->assertJsonPath('assignment.name', 'Gudang Selatan');
+        ])->assertCreated()
+            ->assertJsonPath('assignment.name', 'Gudang Selatan')
+            ->assertJsonPath('assignment.description', 'Pintu utama')
+            ->assertJsonPath('assignment.icon', 'warehouse');
+
+        $trackingData = $this->getJson(route('tracking.data'))->assertOk()->json('employees');
+        $employeePayload = collect($trackingData)->firstWhere('id', $employee->id_karyawan);
+        $this->assertCount(1, $employeePayload['assignments']);
 
         $this->postJson(route('tracking.simulate', $employee), [
             'latitude' => -7.424,
             'longitude' => 109.232,
         ])->assertCreated()->assertJsonPath('point.isSimulated', true);
 
-        $this->assertDatabaseHas('tbl_penugasan_lokasi', [
+        $this->assertDatabaseHas('tbl_penugasan_lokasi_tujuan', [
             'id_karyawan' => $employee->id_karyawan,
             'nama_lokasi' => 'Gudang Selatan',
+            'ikon' => 'warehouse',
+            'keterangan' => 'Pintu utama',
         ]);
         $this->assertDatabaseHas('tbl_tracking_lokasi', [
             'id_karyawan' => $employee->id_karyawan,
@@ -137,6 +160,152 @@ class LocationTrackingTest extends TestCase
 
         $this->actingAs($employee->user)
             ->getJson(route('tracking.history', $other))
+            ->assertForbidden();
+    }
+
+    public function test_manager_can_read_location_history_for_one_selected_date_in_chronological_order(): void
+    {
+        $hrd = $this->makeEmployee('hrd');
+        $employee = $this->makeEmployee('karyawan');
+
+        foreach ([
+            ['2026-11-05', '09:15:00', -7.4245, 109.2305],
+            ['2026-11-05', '08:10:00', -7.4243, 109.2302],
+            ['2026-11-04', '17:00:00', -7.4300, 109.2400],
+        ] as [$date, $time, $latitude, $longitude]) {
+            LocationTracking::create([
+                'id_karyawan' => $employee->id_karyawan,
+                'tanggal' => $date,
+                'waktu' => $time,
+                'latitude' => $latitude,
+                'longitude' => $longitude,
+                'keterangan' => null,
+                'is_simulated' => false,
+            ]);
+        }
+
+        $this->actingAs($hrd->user)
+            ->getJson(route('tracking.history', ['employee' => $employee, 'date' => '2026-11-05']))
+            ->assertOk()
+            ->assertJsonPath('date', '2026-11-05')
+            ->assertJsonPath('total', 2)
+            ->assertJsonPath('points.0.time', '08:10:00')
+            ->assertJsonPath('points.1.time', '09:15:00')
+            ->assertJsonPath('points.0.isSimulated', false)
+            ->assertJsonPath('truncated', false);
+
+        $this->actingAs($hrd->user)
+            ->getJson(route('tracking.history', ['employee' => $employee, 'date' => '2026-02-31']))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('date');
+    }
+
+    public function test_manager_can_manage_multiple_destinations_and_history_reports_geofence_visits(): void
+    {
+        $hrd = $this->makeEmployee('hrd');
+        $employee = $this->makeEmployee('karyawan');
+
+        $first = $this->actingAs($hrd->user)
+            ->postJson(route('tracking.assignment'), [
+                'employee_id' => $employee->id_karyawan,
+                'name' => 'Gudang Selatan',
+                'description' => 'Pintu belakang',
+                'icon' => 'warehouse',
+                'latitude' => -7.4243,
+                'longitude' => 109.2302,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('assignment.icon', 'warehouse')
+            ->json('assignment');
+        $second = $this->postJson(route('tracking.assignment'), [
+            'employee_id' => $employee->id_karyawan,
+            'name' => 'Kantor Cabang',
+            'icon' => 'office',
+            'latitude' => -7.4300,
+            'longitude' => 109.2400,
+        ])->assertCreated()->json('assignment');
+
+        $this->putJson(route('tracking.assignment.update', $first['id']), [
+            'name' => 'Gudang Utama',
+            'description' => 'Pintu belakang',
+            'icon' => 'store',
+            'latitude' => -7.4243,
+            'longitude' => 109.2302,
+        ])->assertOk()
+            ->assertJsonPath('assignment.name', 'Gudang Utama')
+            ->assertJsonPath('assignment.icon', 'store');
+
+        LocationTracking::create([
+            'id_karyawan' => $employee->id_karyawan,
+            'tanggal' => '2026-11-05',
+            'waktu' => '08:30:00',
+            'latitude' => -7.42431,
+            'longitude' => 109.23021,
+            'keterangan' => 'Lokasi simulasi',
+            'is_simulated' => true,
+        ]);
+
+        $this->getJson(route('tracking.history', ['employee' => $employee, 'date' => '2026-11-05']))
+            ->assertOk()
+            ->assertJsonCount(2, 'assignments')
+            ->assertJsonPath('assignments.0.name', 'Gudang Utama')
+            ->assertJsonPath('assignments.0.icon', 'store')
+            ->assertJsonPath('assignments.0.description', 'Pintu belakang')
+            ->assertJsonPath('assignments.0.geofenceRadiusMeters', 100)
+            ->assertJsonPath('assignments.0.visited', true)
+            ->assertJsonPath('assignments.0.visitedAt', '2026-11-05T08:30:00+07:00')
+            ->assertJsonPath('assignments.0.visitIsSimulated', true)
+            ->assertJsonPath('assignments.1.visited', false);
+
+        $this->deleteJson(route('tracking.assignment.delete', $second['id']))
+            ->assertOk()
+            ->assertJsonPath('deleted', true);
+        $this->assertDatabaseMissing('tbl_penugasan_lokasi_tujuan', ['id_tujuan' => $second['id']]);
+        $this->assertDatabaseHas('tbl_penugasan_lokasi_tujuan', ['id_tujuan' => $first['id']]);
+    }
+
+    public function test_simulation_reset_only_deletes_simulated_tracking_points(): void
+    {
+        $hrd = $this->makeEmployee('hrd');
+        $employee = $this->makeEmployee('karyawan');
+        $destination = LocationAssignment::create([
+            'id_karyawan' => $employee->id_karyawan,
+            'nama_lokasi' => 'Kantor',
+            'ikon' => 'office',
+            'latitude' => -7.4243,
+            'longitude' => 109.2302,
+            'id_pemberi_tugas' => $hrd->id_pengguna,
+        ]);
+
+        $realPoint = LocationTracking::create([
+            'id_karyawan' => $employee->id_karyawan,
+            'tanggal' => '2026-11-05',
+            'waktu' => '08:00:00',
+            'latitude' => -7.4243,
+            'longitude' => 109.2302,
+            'is_simulated' => false,
+        ]);
+        $simulatedPoint = LocationTracking::create([
+            'id_karyawan' => $employee->id_karyawan,
+            'tanggal' => '2026-11-05',
+            'waktu' => '08:05:00',
+            'latitude' => -7.4250,
+            'longitude' => 109.2310,
+            'is_simulated' => true,
+        ]);
+
+        $this->actingAs($hrd->user)
+            ->deleteJson(route('tracking.simulation.reset'))
+            ->assertOk()
+            ->assertJsonPath('deleted', 1);
+
+        $this->assertDatabaseHas('tbl_tracking_lokasi', ['id_tracking' => $realPoint->id_tracking, 'is_simulated' => false]);
+        $this->assertDatabaseMissing('tbl_tracking_lokasi', ['id_tracking' => $simulatedPoint->id_tracking]);
+        $this->assertDatabaseHas('tbl_penugasan_lokasi_tujuan', ['id_tujuan' => $destination->id_tujuan]);
+        $this->assertDatabaseHas('tbl_pengguna', ['id_pengguna' => $hrd->id_pengguna]);
+
+        $this->actingAs($employee->user)
+            ->deleteJson(route('tracking.simulation.reset'))
             ->assertForbidden();
     }
 

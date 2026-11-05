@@ -7,14 +7,18 @@ use App\Models\LocationAssignment;
 use App\Models\LocationPlace;
 use App\Models\LocationTracking;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\View\View;
 
 class LocationTrackingController extends Controller
 {
+    private const GEOFENCE_RADIUS_METERS = 100;
+
     public function index(Request $request): View
     {
         $user = $request->user();
@@ -31,7 +35,7 @@ class LocationTrackingController extends Controller
         $assignments = LocationAssignment::query()
             ->whereIn('id_karyawan', $employeeIds)
             ->get()
-            ->keyBy('id_karyawan');
+            ->groupBy('id_karyawan');
 
         $places = $user->isApprover()
             ? LocationPlace::query()->orderBy('nama_lokasi')->get()
@@ -42,7 +46,7 @@ class LocationTrackingController extends Controller
             'isManager' => $user->isApprover(),
             'employees' => $employees->map(fn (Employee $employee) => $this->employeePayload(
                 $employee,
-                $assignments->get($employee->id_karyawan),
+                $assignments->get($employee->id_karyawan, collect()),
             ))->values(),
             'places' => $places->map(fn (LocationPlace $place) => $this->placePayload($place))->values(),
         ]);
@@ -63,12 +67,12 @@ class LocationTrackingController extends Controller
         $assignments = LocationAssignment::query()
             ->whereIn('id_karyawan', $employees->modelKeys())
             ->get()
-            ->keyBy('id_karyawan');
+            ->groupBy('id_karyawan');
 
         return response()->json([
             'employees' => $employees->map(fn (Employee $employee) => $this->employeePayload(
                 $employee,
-                $assignments->get($employee->id_karyawan),
+                $assignments->get($employee->id_karyawan, collect()),
             ))->values(),
         ]);
     }
@@ -77,16 +81,42 @@ class LocationTrackingController extends Controller
     {
         $this->authorizeEmployee($request->user(), $employee);
 
-        $points = LocationTracking::query()
+        $validated = $request->validate([
+            'date' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+        $date = $validated['date'] ?? now()->toDateString();
+        $query = LocationTracking::query()
             ->where('id_karyawan', $employee->id_karyawan)
-            ->latest('id_tracking')
-            ->limit(300)
-            ->get(['id_tracking', 'latitude', 'longitude', 'created_at', 'is_simulated'])
-            ->reverse()
-            ->values()
+            ->whereDate('tanggal', $date)
+            ->orderBy('waktu')
+            ->orderBy('id_tracking');
+        $total = (clone $query)->count();
+        $points = $query
+            ->limit(5000)
+            ->get(['id_tracking', 'tanggal', 'waktu', 'latitude', 'longitude', 'created_at', 'is_simulated', 'keterangan'])
             ->map(fn (LocationTracking $point) => $this->pointPayload($point));
+        $assignments = LocationAssignment::query()
+            ->where('id_karyawan', $employee->id_karyawan)
+            ->orderBy('id_tujuan')
+            ->get()
+            ->map(function (LocationAssignment $assignment) use ($date): array {
+                $visit = $this->assignmentVisit($assignment, $date);
 
-        return response()->json(['points' => $points]);
+                return $this->assignmentPayload($assignment) + [
+                    'geofenceRadiusMeters' => self::GEOFENCE_RADIUS_METERS,
+                    'visited' => $visit !== null,
+                    'visitedAt' => $visit['recordedAt'] ?? null,
+                    'visitIsSimulated' => $visit['isSimulated'] ?? false,
+                ];
+            });
+
+        return response()->json([
+            'date' => $date,
+            'points' => $points,
+            'assignments' => $assignments,
+            'truncated' => $total > $points->count(),
+            'total' => $total,
+        ]);
     }
 
     public function storePosition(Request $request): JsonResponse
@@ -120,26 +150,66 @@ class LocationTrackingController extends Controller
         $data = $request->validate([
             'employee_id' => ['required', 'integer'],
             'name' => ['required', 'string', 'max:120'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'icon' => ['sometimes', 'nullable', 'string', 'in:pin,office,warehouse,store,meeting,target'],
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
         ]);
 
         $employee = $this->findVisibleEmployee($request->user(), (int) $data['employee_id']);
-        $assignment = LocationAssignment::updateOrCreate(
-            ['id_karyawan' => $employee->id_karyawan],
-            [
-                'nama_lokasi' => $data['name'],
-                'latitude' => $data['latitude'],
-                'longitude' => $data['longitude'],
-                'id_pemberi_tugas' => $request->user()->id_pengguna,
-            ],
-        );
+        $assignment = LocationAssignment::create([
+            'id_karyawan' => $employee->id_karyawan,
+            'nama_lokasi' => trim($data['name']),
+            'keterangan' => isset($data['description']) ? trim($data['description']) : null,
+            'ikon' => $data['icon'] ?? 'pin',
+            'latitude' => $data['latitude'],
+            'longitude' => $data['longitude'],
+            'id_pemberi_tugas' => $request->user()->id_pengguna,
+        ]);
 
-        return response()->json(['assignment' => [
-            'name' => $assignment->nama_lokasi,
-            'latitude' => (float) $assignment->latitude,
-            'longitude' => (float) $assignment->longitude,
-        ]]);
+        return response()->json(['assignment' => $this->assignmentPayload($assignment)], 201);
+    }
+
+    public function updateAssignment(Request $request, LocationAssignment $assignment): JsonResponse
+    {
+        $this->authorizeManager($request->user());
+        $employee = $this->findVisibleEmployee($request->user(), (int) $assignment->id_karyawan);
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'icon' => ['sometimes', 'nullable', 'string', 'in:pin,office,warehouse,store,meeting,target'],
+            'latitude' => ['required', 'numeric', 'between:-90,90'],
+            'longitude' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
+        abort_unless((int) $assignment->id_karyawan === (int) $employee->id_karyawan, 404);
+        $assignment->update([
+            'nama_lokasi' => trim($data['name']),
+            'keterangan' => isset($data['description']) ? trim($data['description']) : null,
+            'ikon' => $data['icon'] ?? $assignment->ikon,
+            'latitude' => $data['latitude'],
+            'longitude' => $data['longitude'],
+        ]);
+
+        return response()->json(['assignment' => $this->assignmentPayload($assignment->refresh())]);
+    }
+
+    public function deleteAssignment(Request $request, LocationAssignment $assignment): JsonResponse
+    {
+        $this->authorizeManager($request->user());
+        $this->findVisibleEmployee($request->user(), (int) $assignment->id_karyawan);
+        $assignment->delete();
+
+        return response()->json(['deleted' => true]);
+    }
+
+    public function resetSimulation(Request $request): JsonResponse
+    {
+        $this->authorizeManager($request->user());
+        $deleted = LocationTracking::query()->where('is_simulated', true)->delete();
+
+        return response()->json(['deleted' => $deleted]);
     }
 
     public function storePlace(Request $request): JsonResponse
@@ -274,7 +344,7 @@ class LocationTrackingController extends Controller
         abort_unless($user->isApprover(), 403, 'Hanya admin atau atasan yang dapat mengelola lokasi.');
     }
 
-    private function employeePayload(Employee $employee, ?LocationAssignment $assignment): array
+    private function employeePayload(Employee $employee, Collection $assignments): array
     {
         $latest = $employee->latestLocationTracking;
         $updatedAt = $latest?->created_at;
@@ -293,12 +363,57 @@ class LocationTrackingController extends Controller
             'status' => $updatedAt && $updatedAt->greaterThanOrEqualTo(now()->subMinutes(5))
                 ? 'live'
                 : 'offline',
-            'assignment' => $assignment ? [
-                'name' => $assignment->nama_lokasi,
-                'latitude' => (float) $assignment->latitude,
-                'longitude' => (float) $assignment->longitude,
-            ] : null,
+            'assignments' => $assignments->map(fn (LocationAssignment $assignment) => $this->assignmentPayload($assignment))->values(),
+            'assignment' => $assignments->first() ? $this->assignmentPayload($assignments->first()) : null,
         ];
+    }
+
+    private function assignmentVisit(LocationAssignment $assignment, string $date): ?array
+    {
+        $latitude = (float) $assignment->latitude;
+        $longitude = (float) $assignment->longitude;
+        $latitudeDelta = self::GEOFENCE_RADIUS_METERS / 111_320;
+        $longitudeDelta = self::GEOFENCE_RADIUS_METERS / (111_320 * max(abs(cos(deg2rad($latitude))), 0.01));
+
+        $point = LocationTracking::query()
+            ->where('id_karyawan', $assignment->id_karyawan)
+            ->whereDate('tanggal', $date)
+            ->whereBetween('latitude', [$latitude - $latitudeDelta, $latitude + $latitudeDelta])
+            ->whereBetween('longitude', [$longitude - $longitudeDelta, $longitude + $longitudeDelta])
+            ->orderBy('waktu')
+            ->orderBy('id_tracking')
+            ->get(['id_tracking', 'tanggal', 'waktu', 'latitude', 'longitude', 'is_simulated'])
+            ->first(fn (LocationTracking $point): bool => $this->distanceMeters(
+                $latitude,
+                $longitude,
+                (float) $point->latitude,
+                (float) $point->longitude,
+            ) <= self::GEOFENCE_RADIUS_METERS);
+
+        return $point ? $this->pointPayload($point) : null;
+    }
+
+    private function assignmentPayload(LocationAssignment $assignment): array
+    {
+        return [
+            'id' => $assignment->id_tujuan,
+            'name' => $assignment->nama_lokasi,
+            'description' => $assignment->keterangan,
+            'icon' => $assignment->ikon,
+            'latitude' => (float) $assignment->latitude,
+            'longitude' => (float) $assignment->longitude,
+        ];
+    }
+
+    private function distanceMeters(float $latitudeA, float $longitudeA, float $latitudeB, float $longitudeB): float
+    {
+        $toRadians = static fn (float $degrees): float => $degrees * M_PI / 180;
+        $latitudeDelta = $toRadians($latitudeB - $latitudeA);
+        $longitudeDelta = $toRadians($longitudeB - $longitudeA);
+        $a = sin($latitudeDelta / 2) ** 2
+            + cos($toRadians($latitudeA)) * cos($toRadians($latitudeB)) * sin($longitudeDelta / 2) ** 2;
+
+        return 6_371_000 * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 
     private function placePayload(LocationPlace $place): array
@@ -315,10 +430,15 @@ class LocationTrackingController extends Controller
     private function pointPayload(LocationTracking $point): array
     {
         return [
+            'id' => $point->id_tracking,
             'latitude' => (float) $point->latitude,
             'longitude' => (float) $point->longitude,
+            'date' => $point->tanggal,
+            'time' => $point->waktu,
+            'recordedAt' => CarbonImmutable::parse($point->tanggal.' '.$point->waktu)->toIso8601String(),
             'createdAt' => $point->created_at?->toIso8601String(),
             'isSimulated' => (bool) $point->is_simulated,
+            'note' => $point->keterangan,
         ];
     }
 }
