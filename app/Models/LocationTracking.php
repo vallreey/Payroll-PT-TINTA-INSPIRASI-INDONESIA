@@ -23,6 +23,7 @@ class LocationTracking extends Model
         'latitude',
         'longitude',
         'keterangan',
+        'is_simulated',
     ];
 
     protected function casts(): array
@@ -30,6 +31,7 @@ class LocationTracking extends Model
         return [
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
+            'is_simulated' => 'boolean',
         ];
     }
 
@@ -37,4 +39,5 @@ class LocationTracking extends Model
     {
         return $this->belongsTo(Employee::class, 'id_karyawan', 'id_karyawan');
     }
+
 }

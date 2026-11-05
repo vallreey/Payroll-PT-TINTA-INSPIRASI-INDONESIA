@@ -37,8 +37,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title }} - PT. Tinta Inspirasi Indonesia</title>
+    @stack('styles')
     <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=poppins:400,500,600" rel="stylesheet">
+    <link href="https://fonts.bunny.net/css?family=poppins:400,500,600,700" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-[#f5f6fb] font-sans text-gray-900 antialiased"
@@ -140,5 +141,6 @@
             {{ $slot }}
         </main>
     </div>
+    @stack('scripts')
 </body>
 </html>
