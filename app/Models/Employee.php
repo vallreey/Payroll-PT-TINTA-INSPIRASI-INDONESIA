@@ -92,6 +92,11 @@ class Employee extends Model
         return $this->hasMany(LocationTracking::class, 'id_karyawan', 'id_karyawan');
     }
 
+    public function latestLocationTracking()
+    {
+        return $this->hasOne(LocationTracking::class, 'id_karyawan', 'id_karyawan')->latestOfMany('id_tracking');
+    }
+
     public function leaveRequests()
     {
         return $this->hasMany(LeaveRequest::class, 'id_karyawan', 'id_karyawan');
