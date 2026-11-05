@@ -88,7 +88,8 @@ erDiagram
 9. **View `v_karyawan_aktif`, `v_slip_gaji`, `v_rekap_absensi`** dibuat (hanya MySQL/MariaDB/PostgreSQL; dilewati di SQLite). Hari izin/cuti/sakit pada rekap dihitung di bulan tanggal mulainya.
 10. **Kunci primer** bertipe `bigint unsigned` (default Laravel), bukan `integer(10)` seperti SDD.
 11. **`username` masih nullable**: login/registrasi saat ini berbasis email. Jadikan NOT NULL setelah alur auth pindah ke username (SRS use case 001/002, AC-001).
-12. **Notifikasi memakai tabel SDD sendiri** (`tbl_notifikasi`), bukan tabel `notifications` bawaan Laravel, sehingga `$user->notify()` tidak dipakai; pengisian lewat `NotificationService`.
+12. **`status_kepegawaian`** memakai nilai `tetap / kontrak / percobaan` (Permanent / Contract / Probation) sesuai prototype halaman Karyawan. Nilai lama `lapangan` dipetakan ke `kontrak` oleh migrasi `…000010`.
+13. **Notifikasi memakai tabel SDD sendiri** (`tbl_notifikasi`), bukan tabel `notifications` bawaan Laravel, sehingga `$user->notify()` tidak dipakai; pengisian lewat `NotificationService`.
 
 ## 6. Urutan migrasi
 
@@ -99,6 +100,7 @@ erDiagram
 | `2025_01_01_000001`–`000003` | `tbl_departemen`, `tbl_karyawan`, `tbl_dokumen_karyawan` |
 | `000004`–`000008` | `tbl_absensi`, `tbl_tracking_lokasi`, `tbl_izin_cuti`, `tbl_penggajian`, `tbl_notifikasi` |
 | `000009` | view laporan (`v_karyawan_aktif`, `v_slip_gaji`, `v_rekap_absensi`) |
+| `000010` | mengganti enum `tbl_karyawan.status_kepegawaian` menjadi `tetap/kontrak/percobaan` |
 
 Database hanya berisi tabel SDD (+ `tbl_dokumen_karyawan` dari SRS). Tidak ada tabel dummy.
 

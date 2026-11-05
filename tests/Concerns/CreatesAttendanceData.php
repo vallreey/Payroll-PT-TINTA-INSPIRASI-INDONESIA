@@ -17,11 +17,12 @@ trait CreatesAttendanceData
     {
         $account = User::factory()->approved()->create(['role' => $role] + $user);
 
-        return Employee::create([
+        // Nilai dari pemanggil didahulukan; yang tidak diberikan diisi nilai bawaan
+        return Employee::create($employee + [
             'id_pengguna' => $account->id_pengguna,
             'nik' => 'NIK'.(++$this->nikCounter),
-            'nama_lengkap' => $employee['nama_lengkap'] ?? 'Karyawan '.$this->nikCounter,
-        ] + $employee);
+            'nama_lengkap' => 'Karyawan '.$this->nikCounter,
+        ]);
     }
 
     protected function makeAttendance(Employee $employee, string $date, string $jamMasuk, array $extra = []): Attendance

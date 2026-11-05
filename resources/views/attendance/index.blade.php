@@ -1,192 +1,262 @@
+@php
+    use Illuminate\Support\Facades\Route as RouteFacade;
+
+    $has = fn (string $name) => RouteFacade::has($name);
+    $time = fn (?string $t) => $t ? substr(str_replace(':', '.', $t), 0, 5) : '-';
+    $query = request()->query();
+
+    $statusBadge = [
+        'hadir' => ['On-Time', 'border-green-500 bg-green-50 text-green-600'],
+        'terlambat' => ['Late', 'border-red-500 bg-red-50 text-red-600'],
+        'alpha' => ['Absent', 'border-amber-400 bg-amber-50 text-amber-500'],
+    ];
+
+    $statusOptions = [
+        'on_time' => 'On-Time',
+        'late' => 'Late',
+        'pending' => 'Menunggu persetujuan',
+        'approved' => 'Disetujui',
+        'rejected' => 'Ditolak',
+    ];
+
+    $dateValue = $filters['date']?->toDateString() ?? '';
+    $showDateColumn = $filters['date'] === null;
+@endphp
+
 <x-app-layout title="Absensi">
+
     <x-slot:heading>
-        <div class="flex items-center gap-3">
-            <h1 class="text-[2rem] font-semibold tracking-tight text-slate-900">Absensi</h1>
-        </div>
-        <p class="mt-1 text-sm text-slate-500">Rekap kehadiran karyawan</p>
+        <h1 class="text-xl font-semibold text-gray-900 sm:text-2xl">Absensi</h1>
+        <p class="mt-0.5 text-xs text-gray-700">{{ $isManager ? 'Rekap kehadiran karyawan' : 'Riwayat kehadiran saya' }}</p>
     </x-slot:heading>
 
-    <div class="space-y-5 pb-2">
-        <section class="rounded-[18px] border border-slate-200 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.03)] sm:p-5">
-            <div class="flex items-center justify-between">
-                <h2 class="text-[1.05rem] font-semibold text-slate-800">Kehadiran</h2>
-                <button type="button" class="flex size-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:bg-slate-100" aria-label="Lihat detail">
-                    <x-icon name="external" size="size-4" />
-                </button>
+    @if (session('status'))
+        <div role="status" class="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">{{ session('status') }}</div>
+    @endif
+    @if (session('error'))
+        <div role="alert" class="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{{ session('error') }}</div>
+    @endif
+
+    @if ($canRecord)
+        <div class="mb-4 flex justify-end">
+            <a href="{{ route('attendance.record') }}"
+               class="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-700 px-4 py-2.5 text-sm font-medium text-white shadow-card hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">
+                <x-icon name="camera" size="size-4" /> Catat Absensi
+            </a>
+        </div>
+    @endif
+
+    {{-- ================= KEHADIRAN (ringkasan) ================= --}}
+    @if ($summary)
+        <section class="rounded-2xl bg-white p-5 shadow-card sm:p-6" aria-labelledby="presence-heading">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h2 id="presence-heading" class="text-base font-semibold text-gray-900">Kehadiran</h2>
+                    <p class="mt-0.5 text-xs text-gray-500">
+                        {{ $summaryDate->locale('id')->translatedFormat('l, j F Y') }}
+                        @unless ($summary['working_day'])
+                            <span class="ml-1 rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">Bukan hari kerja</span>
+                        @endunless
+                    </p>
+                </div>
+                @if ($has('reports.index'))
+                    <a href="{{ route('reports.index') }}" aria-label="Buka laporan"
+                       class="flex size-9 shrink-0 items-center justify-center rounded-lg border border-blue-500 text-gray-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-500">
+                        <x-icon name="external" size="size-4" />
+                    </a>
+                @else
+                    <span aria-disabled="true" title="Halaman laporan belum tersedia"
+                          class="flex size-9 shrink-0 cursor-default items-center justify-center rounded-lg border border-blue-200 text-gray-400">
+                        <x-icon name="external" size="size-4" />
+                    </span>
+                @endif
             </div>
 
-            <div class="mt-4 grid overflow-hidden rounded-2xl border border-slate-200 bg-[#f8fafc] md:grid-cols-3">
-                <div class="px-4 py-4 text-center sm:px-5">
-                    <div class="text-[0.9rem] font-semibold text-slate-700">Present</div>
-                    <div class="mt-4 grid grid-cols-3 gap-3">
-                        <div>
-                            <div class="text-[1.8rem] font-semibold leading-none text-[#2b8ef7]">{{ $summary['present']['on_time'] }}</div>
-                            <div class="mt-2 text-[0.7rem] text-slate-500">On Time</div>
-                        </div>
-                        <div>
-                            <div class="text-[1.8rem] font-semibold leading-none text-[#2b8ef7]">{{ $summary['present']['early_clock_in'] }}</div>
-                            <div class="mt-2 text-[0.7rem] text-slate-500">Early Clock In</div>
-                        </div>
-                        <div>
-                            <div class="text-[1.8rem] font-semibold leading-none text-[#2b8ef7]">{{ $summary['present']['late_clock_in'] }}</div>
-                            <div class="mt-2 text-[0.7rem] text-slate-500">Late Clock In</div>
-                        </div>
+            @php
+                $groups = [
+                    'Present' => [['On Time', $summary['present']['on_time']], ['Early Clock In', $summary['present']['early']], ['Late Clock In', $summary['present']['late']]],
+                    'Absent' => [['Leaved', $summary['absent']['leaved']], ['No Clock In', $summary['absent']['no_clock_in']], ['No Clock out', $summary['absent']['no_clock_out']]],
+                    'Away' => [['Day Off', $summary['away']['day_off']], ['Time Off', $summary['away']['time_off']]],
+                ];
+            @endphp
+            <div class="mt-5 grid divide-y divide-gray-200 rounded-lg border border-gray-200 md:grid-cols-[1.5fr_1.5fr_1fr] md:divide-x md:divide-y-0">
+                @foreach ($groups as $group => $items)
+                    <div class="p-4 sm:p-5">
+                        <p class="text-xs font-medium text-gray-900">{{ $group }}</p>
+                        <dl class="mt-4 flex flex-wrap gap-x-8 gap-y-4">
+                            @foreach ($items as [$label, $count])
+                                <div>
+                                    <dd class="text-xl font-semibold tabular-nums text-blue-700">{{ $count }}</dd>
+                                    <dt class="mt-1 text-xs text-gray-400">{{ $label }}</dt>
+                                </div>
+                            @endforeach
+                        </dl>
                     </div>
-                </div>
-
-                <div class="border-t border-slate-200 px-4 py-4 text-center sm:px-5 md:border-l md:border-t-0">
-                    <div class="text-[0.9rem] font-semibold text-slate-700">Absent</div>
-                    <div class="mt-4 grid grid-cols-3 gap-3">
-                        <div>
-                            <div class="text-[1.8rem] font-semibold leading-none text-[#e85d5d]">{{ $summary['absent']['leaved'] }}</div>
-                            <div class="mt-2 text-[0.7rem] text-slate-500">Leaved</div>
-                        </div>
-                        <div>
-                            <div class="text-[1.8rem] font-semibold leading-none text-[#e85d5d]">{{ $summary['absent']['no_clock_in'] }}</div>
-                            <div class="mt-2 text-[0.7rem] text-slate-500">No Clock In</div>
-                        </div>
-                        <div>
-                            <div class="text-[1.8rem] font-semibold leading-none text-[#e85d5d]">{{ $summary['absent']['no_clock_out'] }}</div>
-                            <div class="mt-2 text-[0.7rem] text-slate-500">No Clock Out</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="border-t border-slate-200 px-4 py-4 text-center sm:px-5 md:border-l md:border-t-0">
-                    <div class="text-[0.9rem] font-semibold text-slate-700">Away</div>
-                    <div class="mt-4 grid grid-cols-2 gap-3">
-                        <div>
-                            <div class="text-[1.8rem] font-semibold leading-none text-[#f0a93d]">{{ $summary['away']['total'] }}</div>
-                            <div class="mt-2 text-[0.7rem] text-slate-500">Day Off</div>
-                        </div>
-                        <div>
-                            <div class="text-[1.8rem] font-semibold leading-none text-[#f0a93d]">0</div>
-                            <div class="mt-2 text-[0.7rem] text-slate-500">Time Off</div>
-                        </div>
-                    </div>
-                </div>
+                @endforeach
             </div>
         </section>
+    @endif
 
-        <section class="rounded-[18px] border border-slate-200 bg-white p-4 shadow-[0_2px_12px_rgba(15,23,42,0.03)] sm:p-5">
-            <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <h2 class="shrink-0 text-[1.05rem] font-semibold text-[#183153] xl:whitespace-nowrap">Persetujuan Absensi</h2>
+    {{-- ================= PERSETUJUAN ABSENSI ================= --}}
+    <section class="{{ $summary ? 'mt-6' : '' }} min-w-0 rounded-2xl bg-white p-5 shadow-card sm:p-6" aria-labelledby="approval-heading">
+        <h2 id="approval-heading" class="text-base font-semibold text-gray-900">{{ $isManager ? 'Persetujuan Absensi' : 'Riwayat Absensi' }}</h2>
 
-                <div class="flex flex-wrap items-center justify-end gap-2 xl:flex-nowrap">
-                    <div class="flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl border border-[#dce5f0] bg-[#f8fafc] px-3 text-xs font-medium text-[#8193ad]">
-                        <x-icon name="filter" size="size-4" />
-                        1/3
-                    </div>
+        <form method="GET" action="{{ route('attendance.index') }}" role="search" class="mt-5 flex flex-wrap items-center gap-3">
+            <span class="flex h-11 items-center gap-2 rounded-lg border border-gray-200 px-3 text-xs text-gray-500" title="Jumlah filter aktif (tanggal, divisi, status)">
+                <x-icon name="filter" size="size-4" /> {{ $activeFilters }}/{{ $isManager ? 3 : 2 }}
+            </span>
 
-                    <form method="GET" action="{{ route('attendance.index') }}" class="flex flex-wrap items-center gap-2 xl:flex-nowrap">
-                        <div class="relative">
-                            <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                                <x-icon name="search" size="size-4" />
-                            </span>
-                            <input type="search" name="search" value="{{ $search }}" placeholder="Search" class="h-10 w-36 rounded-xl border border-[#dce5f0] bg-[#f8fafc] pl-9 pr-3 text-sm text-[#183153] placeholder:text-[#8a9bb5] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                        </div>
-
-                        <div class="relative">
-                            <input type="date" name="date" value="{{ $date }}" class="h-10 w-[11.5rem] rounded-xl border border-[#dce5f0] bg-[#f8fafc] px-3 pr-9 text-sm text-[#183153] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100" />
-                            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                                <x-icon name="calendar" size="size-4" />
-                            </span>
-                        </div>
-
-                        <div class="relative">
-                            <select name="division" class="h-10 w-[8.5rem] appearance-none rounded-xl border border-[#dce5f0] bg-[#f8fafc] px-3 pr-9 text-sm text-[#183153] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
-                                @foreach ($divisions as $key => $label)
-                                    <option value="{{ $key }}" @selected($division === $key)>{{ $label }}</option>
-                                @endforeach
-                            </select>
-                            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                                <x-icon name="chevron-down" size="size-4" class="text-[#8a9bb5]" />
-                            </span>
-                        </div>
-
-                        <div class="relative">
-                            <select name="status" class="h-10 w-[8.5rem] appearance-none rounded-xl border border-[#dce5f0] bg-[#f8fafc] px-3 pr-9 text-sm text-[#183153] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100">
-                                @foreach ($statuses as $key => $label)
-                                    <option value="{{ $key }}" @selected($status === $key)>{{ $label }}</option>
-                                @endforeach
-                            </select>
-                            <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                                <x-icon name="chevron-down" size="size-4" class="text-[#8a9bb5]" />
-                            </span>
-                        </div>
-
-                        <button type="submit" class="h-10 rounded-xl border border-[#dce5f0] bg-white px-4 text-sm font-medium text-[#183153] shadow-sm transition hover:bg-slate-50">Filter</button>
-                    </form>
-
-                    <div class="flex items-center gap-2">
-                        <button type="button" class="h-10 inline-flex items-center gap-2 rounded-xl border border-[#d5ead9] bg-[#edf8ef] px-4 text-sm font-medium text-[#159447] transition hover:bg-[#e5f4e8]">
-                            <x-icon name="plus" size="size-4" />
-                            Export
-                        </button>
-                    </div>
-                </div>
+            <div class="relative min-w-40 flex-1">
+                <label for="att-search" class="sr-only">Cari nama atau NIK</label>
+                <span class="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-500"><x-icon name="search" size="size-4" /></span>
+                <input id="att-search" type="search" name="q" value="{{ $filters['q'] }}" maxlength="100" placeholder="Search"
+                       class="h-11 w-full rounded-lg border border-gray-300 pl-9 pr-3 text-xs text-gray-700 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
             </div>
 
-            <div class="mt-4 overflow-hidden rounded-2xl border border-slate-200">
-                <div class="overflow-x-auto">
-                    <table class="min-w-full border-collapse text-left text-sm text-slate-700">
-                        <thead>
-                            <tr class="bg-[#f0f2f5] text-[#27364a]">
-                                <th class="px-4 py-3 text-[0.8rem] font-semibold">Employee Name</th>
-                                <th class="px-4 py-3 text-[0.8rem] font-semibold">Divisi</th>
-                                <th class="px-4 py-3 text-[0.8rem] font-semibold">Check-in</th>
-                                <th class="px-4 py-3 text-[0.8rem] font-semibold">Check-out</th>
-                                <th class="px-4 py-3 text-[0.8rem] font-semibold">Evidence</th>
-                                <th class="px-4 py-3 text-[0.8rem] font-semibold">Status</th>
-                                <th class="px-4 py-3 text-[0.8rem] font-semibold">Other</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-200 bg-white">
-                            @forelse ($rows as $employee)
-                                <tr class="align-middle">
-                                    <td class="px-4 py-3">
-                                        <div class="flex items-center gap-3">
-                                            <span class="flex size-10 items-center justify-center rounded-full bg-gradient-to-br from-[#f2f4f7] to-[#dfe7f2] text-[0.72rem] font-semibold text-slate-700">{{ strtoupper(\Illuminate\Support\Str::substr($employee['name'], 0, 2)) }}</span>
-                                            <span class="font-medium text-slate-800">{{ $employee['name'] }}</span>
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3 text-slate-600">{{ $employee['division'] }}</td>
-                                    <td class="px-4 py-3 tabular-nums text-slate-600">{{ $employee['check_in'] }}</td>
-                                    <td class="px-4 py-3 tabular-nums text-slate-600">{{ $employee['check_out'] }}</td>
-                                    <td class="px-4 py-3">
-                                        <span class="inline-flex rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[0.74rem] text-slate-700">{{ $employee['evidence'] }}</span>
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        @if ($employee['status_key'] === 'late')
-                                            <span class="inline-flex rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[0.72rem] font-semibold text-red-500">Late</span>
-                                        @else
-                                            <span class="inline-flex rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[0.72rem] font-semibold text-emerald-600">On-Time</span>
+            <div class="relative">
+                <label for="att-date" class="sr-only">Tanggal</label>
+                <input id="att-date" type="date" name="date" value="{{ $dateValue }}" @change="$el.form.requestSubmit()"
+                       class="h-11 rounded-lg border border-gray-300 bg-white px-3 text-xs text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+            </div>
+
+            @if ($isManager)
+                <div class="relative">
+                    <label for="att-division" class="sr-only">Divisi</label>
+                    <select id="att-division" name="division" @change="$el.form.requestSubmit()"
+                            class="h-11 w-36 appearance-none rounded-lg border border-gray-300 bg-white pl-3 pr-9 text-xs text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                        <option value="">Divisi</option>
+                        @foreach ($departments as $d)
+                            <option value="{{ $d->id_departemen }}" @selected($filters['division'] === $d->id_departemen)>{{ $d->nama_departemen }}</option>
+                        @endforeach
+                    </select>
+                    <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-500"><x-icon name="chevron-down" size="size-4" /></span>
+                </div>
+            @endif
+
+            <div class="relative">
+                <label for="att-status" class="sr-only">Status</label>
+                <select id="att-status" name="status" @change="$el.form.requestSubmit()"
+                        class="h-11 w-44 appearance-none rounded-lg border border-gray-300 bg-white pl-3 pr-9 text-xs text-gray-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    <option value="">Status</option>
+                    @foreach ($statusOptions as $value => $label)
+                        <option value="{{ $value }}" @selected($filters['status'] === $value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-500"><x-icon name="chevron-down" size="size-4" /></span>
+            </div>
+
+            <a href="{{ route('attendance.export.xlsx', $query) }}"
+               class="flex h-11 items-center gap-2 rounded-lg bg-emerald-50 px-4 text-xs text-gray-800 shadow-card hover:bg-emerald-100 focus-visible:outline-2 focus-visible:outline-emerald-600">
+                <x-icon name="excel" size="size-4" class="text-emerald-700" /> Export
+                <span class="sr-only">ke Excel</span>
+            </a>
+            <a href="{{ route('attendance.export.print', $query) }}" target="_blank" rel="noopener"
+               class="flex h-11 items-center gap-2 rounded-lg bg-red-50 px-4 text-xs text-gray-800 shadow-card hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-red-600">
+                <x-icon name="pdf" size="size-4" class="text-red-600" /> Export
+                <span class="sr-only">ke PDF (cetak)</span>
+            </a>
+        </form>
+
+        <div class="mt-5 overflow-x-auto rounded-xl border border-gray-100">
+            <table class="w-full min-w-[860px] text-left text-sm">
+                <thead>
+                    <tr class="bg-slate-100 text-gray-900">
+                        <th scope="col" class="rounded-tl-xl px-4 py-3 font-medium whitespace-nowrap">Employee Name</th>
+                        <th scope="col" class="px-4 py-3 font-medium whitespace-nowrap">Divisi</th>
+                        <th scope="col" class="px-4 py-3 text-center font-medium whitespace-nowrap">Check-in</th>
+                        <th scope="col" class="px-4 py-3 text-center font-medium whitespace-nowrap">Check-out</th>
+                        <th scope="col" class="px-4 py-3 text-center font-medium whitespace-nowrap">Evidance</th>
+                        <th scope="col" class="px-4 py-3 text-center font-medium whitespace-nowrap">Status</th>
+                        <th scope="col" class="rounded-tr-xl px-4 py-3 text-center font-medium whitespace-nowrap">Other</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    @forelse ($rows as $a)
+                        @php
+                            $badge = $statusBadge[$a->status] ?? $statusBadge['hadir'];
+                            $nama = $a->employee?->nama_lengkap ?? '-';
+                        @endphp
+                        <tr>
+                            <td class="px-4 py-3">
+                                <div class="flex items-center gap-3">
+                                    <span class="hidden sm:inline-flex"><x-avatar :name="$nama" :photo="$a->employee?->photo_url" size="size-10" /></span>
+                                    <span class="whitespace-nowrap">
+                                        <span class="block text-gray-900">{{ $nama }}</span>
+                                        @if ($showDateColumn)
+                                            <span class="block text-[11px] text-gray-500">{{ \Carbon\CarbonImmutable::parse($a->tanggal)->locale('id')->translatedFormat('j M Y') }}</span>
                                         @endif
-                                    </td>
-                                    <td class="px-4 py-3">
-                                        <button type="button" class="inline-flex items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-700 transition hover:bg-sky-100">
-                                            Action
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="whitespace-nowrap px-4 py-3 text-gray-700">{{ $a->employee?->department?->nama_departemen ?? '-' }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-center tabular-nums text-gray-900">{{ $time($a->jam_masuk) }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-center tabular-nums text-gray-900">{{ $time($a->jam_keluar) }}</td>
+                            <td class="whitespace-nowrap px-4 py-3 text-center text-xs">
+                                <span class="inline-flex items-center gap-3">
+                                    <a href="{{ route('attendance.photo', [$a, 'masuk']) }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">Img 1</a>
+                                    @if ($a->foto_keluar)
+                                        <a href="{{ route('attendance.photo', [$a, 'keluar']) }}" target="_blank" rel="noopener" class="text-blue-600 hover:underline">Img 2</a>
+                                    @endif
+                                    <a href="https://www.google.com/maps?q={{ $a->lat_masuk }},{{ $a->long_masuk }}" target="_blank" rel="noopener noreferrer"
+                                       aria-label="Lihat lokasi check-in di peta" class="text-gray-500 hover:text-blue-600"><x-icon name="pin" size="size-4" /></a>
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <span class="inline-flex whitespace-nowrap rounded-md border px-3 py-1 text-xs font-medium {{ $badge[1] }}">{{ $badge[0] }}</span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                @if ($canApprove[$a->id_absensi] ?? false)
+                                    <div x-data="{ open: false, top: 0, left: 0 }" @keydown.escape="open = false" @scroll.window="open = false" @resize.window="open = false" class="inline-block">
+                                        <button type="button" aria-haspopup="true" :aria-expanded="open.toString()"
+                                                @click="const r = $el.getBoundingClientRect(); top = r.bottom + 4; left = Math.max(8, r.right - 176); open = !open"
+                                                class="inline-flex items-center gap-2 rounded-md border border-blue-600 bg-white px-3 py-1.5 text-xs text-gray-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-500">
+                                            Action <x-icon name="chevron-down" size="size-4" />
                                         </button>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="7" class="px-5 py-10 text-center text-slate-500">Tidak ada data absensi.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                                        <div x-cloak x-show="open" @click.outside="open = false" x-transition
+                                             :style="'top:' + top + 'px; left:' + left + 'px'"
+                                             class="fixed z-50 w-44 rounded-xl bg-white p-1 text-left shadow-lg ring-1 ring-gray-100">
+                                            <form method="POST" action="{{ route('attendance.approve', $a) }}">
+                                                @csrf @method('PATCH')
+                                                <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-green-700 hover:bg-green-50">
+                                                    <x-icon name="check" size="size-4" /> Setujui
+                                                </button>
+                                            </form>
+                                            <form method="POST" action="{{ route('attendance.reject', $a) }}" onsubmit="return confirm('Tolak absensi {{ e($nama) }}? Karyawan akan diberi tahu.')">
+                                                @csrf @method('PATCH')
+                                                <button type="submit" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-red-700 hover:bg-red-50">
+                                                    <x-icon name="x" size="size-4" /> Tolak
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                @else
+                                    @php
+                                        $state = [
+                                            'pending' => ['Menunggu', 'text-amber-600'],
+                                            'approved' => ['Disetujui', 'text-green-600'],
+                                            'rejected' => ['Ditolak', 'text-red-600'],
+                                        ][$a->status_persetujuan];
+                                    @endphp
+                                    <span class="text-xs font-medium {{ $state[1] }}">{{ $state[0] }}</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="7" class="px-4 py-14 text-center text-sm text-gray-500">
+                                @if ($activeFilters > 0 || $filters['q'] !== '')
+                                    Tidak ada data absensi yang cocok dengan filter ini.
+                                    <a href="{{ route('attendance.index', ['date' => '']) }}" class="font-medium text-blue-600 hover:underline">Lihat semua tanggal</a>
+                                @else
+                                    Belum ada data absensi.
+                                @endif
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </section>
 
-            <div class="mt-5 flex items-center justify-center gap-2">
-                <button type="button" class="flex size-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50">‹</button>
-                <button type="button" class="flex size-9 items-center justify-center rounded-xl border border-blue-200 bg-blue-50 text-blue-600 shadow-sm">1</button>
-                <button type="button" class="flex size-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50">2</button>
-                <button type="button" class="flex size-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50">3</button>
-                <button type="button" class="flex size-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50">›</button>
-            </div>
-        </section>
-    </div>
+    <div class="mt-6">{{ $rows->onEachSide(1)->links('components.pagination') }}</div>
 </x-app-layout>

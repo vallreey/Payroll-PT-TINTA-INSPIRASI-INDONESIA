@@ -12,7 +12,8 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
- * Halaman PENCATATAN absensi.
+ * Halaman PENCATATAN absensi, dipakai dari ponsel: ambil lokasi GPS + foto, lalu kirim.
+ * (Web desktop hanya untuk memantau: lihat AttendanceController.)
  */
 class AttendanceRecordController extends Controller
 {

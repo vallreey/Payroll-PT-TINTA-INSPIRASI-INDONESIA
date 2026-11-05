@@ -62,8 +62,10 @@ class DashboardDemoSeeder extends Seeder
                     'nik' => '3302'.str_pad((string) ($i + 1), 12, '0', STR_PAD_LEFT),
                     'nama_lengkap' => $name,
                     'jabatan' => ['Staff Marketing', 'Desainer', 'Teknisi Lapangan', 'Admin'][$i % 4],
-                    'tanggal_masuk' => $today->copy()->subMonths(6)->toDateString(),
-                    'status_kepegawaian' => 'tetap',
+                    // Variasi data agar ringkasan halaman Karyawan terlihat realistis
+                    'jenis_kelamin' => $i % 2 === 0 ? 'L' : 'P',
+                    'tanggal_masuk' => $today->copy()->subMonths(6 + $i)->toDateString(),
+                    'status_kepegawaian' => ['tetap', 'tetap', 'tetap', 'kontrak', 'percobaan', 'tetap'][$i % 6],
                     'gaji_pokok' => 4500000,
                 ],
             );
