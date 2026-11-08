@@ -89,7 +89,8 @@ erDiagram
 10. **Kunci primer** bertipe `bigint unsigned` (default Laravel), bukan `integer(10)` seperti SDD.
 11. **`username` masih nullable**: login/registrasi saat ini berbasis email. Jadikan NOT NULL setelah alur auth pindah ke username (SRS use case 001/002, AC-001).
 12. **`status_kepegawaian`** memakai nilai `tetap / kontrak / percobaan` (Permanent / Contract / Probation) sesuai prototype halaman Karyawan. Nilai lama `lapangan` dipetakan ke `kontrak` oleh migrasi `…000010`.
-13. **Notifikasi memakai tabel SDD sendiri** (`tbl_notifikasi`), bukan tabel `notifications` bawaan Laravel, sehingga `$user->notify()` tidak dipakai; pengisian lewat `NotificationService`.
+13. **`tbl_pengguna.terakhir_aktif`** (tidak ada di SDD) dicatat oleh middleware `EnsureAccountIsActive`, paling sering sekali per 5 menit.
+14. **Notifikasi memakai tabel SDD sendiri** (`tbl_notifikasi`), bukan tabel `notifications` bawaan Laravel, sehingga `$user->notify()` tidak dipakai; pengisian lewat `NotificationService`.
 
 ## 6. Urutan migrasi
 
@@ -101,6 +102,7 @@ erDiagram
 | `000004`–`000008` | `tbl_absensi`, `tbl_tracking_lokasi`, `tbl_izin_cuti`, `tbl_penggajian`, `tbl_notifikasi` |
 | `000009` | view laporan (`v_karyawan_aktif`, `v_slip_gaji`, `v_rekap_absensi`) |
 | `000010` | mengganti enum `tbl_karyawan.status_kepegawaian` menjadi `tetap/kontrak/percobaan` |
+| `000011` | menambah `tbl_pengguna.terakhir_aktif` (kolom "Terakhir Aktif" di Manajemen Pengguna) |
 
 Database hanya berisi tabel SDD (+ `tbl_dokumen_karyawan` dari SRS). Tidak ada tabel dummy.
 

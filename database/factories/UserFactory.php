@@ -22,6 +22,10 @@ class UserFactory extends Factory
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            // Nilai bawaan database ditulis eksplisit agar model di memori langsung lengkap
+            'role' => 'karyawan',
+            'status' => 'aktif',
+            'status_persetujuan' => 'pending',
             'remember_token' => Str::random(10),
         ];
     }

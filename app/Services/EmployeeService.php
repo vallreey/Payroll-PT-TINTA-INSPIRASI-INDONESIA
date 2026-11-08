@@ -34,6 +34,7 @@ class EmployeeService
             return DB::transaction(function () use ($actor, $data, $path) {
                 // Akun dibuat oleh pengelola, jadi tidak perlu antre persetujuan registrasi
                 $user = User::create([
+                    'username' => $data['username'] ?? null,
                     'email' => $data['email'],
                     'password' => $data['password'],
                     'role' => $data['role'],

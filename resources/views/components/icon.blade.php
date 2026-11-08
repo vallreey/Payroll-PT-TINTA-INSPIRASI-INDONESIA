@@ -40,6 +40,8 @@
         'eye'        => '<path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
         'pencil'     => '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
         'power'      => '<path d="M12 3v8"/><path d="M6.5 6.5a8 8 0 1 0 11 0"/>',
+        'key'        => '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/>',
+        'dots-vertical' => '<path d="M12 6h.01M12 12h.01M12 18h.01" stroke-width="3"/>',
         'check'      => '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     ];
 @endphp

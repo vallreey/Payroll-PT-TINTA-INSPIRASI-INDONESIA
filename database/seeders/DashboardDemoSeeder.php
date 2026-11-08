@@ -10,6 +10,7 @@ use App\Models\Notifikasi;
 use App\Models\Payroll;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -107,7 +108,36 @@ class DashboardDemoSeeder extends Seeder
         }
 
         $this->seedHistory($employees, $today);
+        $this->seedAccounts($employees);
         $this->seedExtras($employees, $today);
+    }
+
+    /** Variasi akun untuk halaman Manajemen Pengguna: terakhir aktif, menunggu, ditolak, dan nonaktif. */
+    private function seedAccounts($employees): void
+    {
+        // Terakhir aktif bervariasi: hari ini, kemarin, beberapa hari lalu, atau belum pernah
+        foreach ($employees as $i => $employee) {
+            $at = match ($i % 4) {
+                0 => now()->setTime(9, 15),
+                1 => now()->subDay()->setTime(9, 15),
+                2 => now()->subDays(5)->setTime(16, 20),
+                default => null,
+            };
+            DB::table('tbl_pengguna')->where('id_pengguna', $employee->id_pengguna)->update(['terakhir_aktif' => $at]);
+        }
+
+        // Pendaftar baru (menunggu), satu ditolak, satu karyawan yang akunnya dinonaktifkan
+        foreach ([
+            ['calon1@tintainspirasi.test', 'Calon Karyawan Satu', 'REG-001', 'pending', 'aktif'],
+            ['calon2@tintainspirasi.test', 'Calon Karyawan Dua', 'REG-002', 'pending', 'aktif'],
+            ['ditolak1@tintainspirasi.test', 'Pendaftar Ditolak', 'REG-003', 'rejected', 'aktif'],
+            ['resign1@tintainspirasi.test', 'Karyawan Nonaktif', 'REG-004', 'approved', 'nonaktif'],
+        ] as [$email, $name, $nik, $approval, $status]) {
+            $user = User::firstOrCreate(['email' => $email], [
+                'password' => 'password', 'role' => 'karyawan', 'status' => $status, 'status_persetujuan' => $approval,
+            ]);
+            Employee::firstOrCreate(['id_pengguna' => $user->id_pengguna], ['nik' => $nik, 'nama_lengkap' => $name, 'status' => $status]);
+        }
     }
 
     /** Foto contoh di disk privat, agar tautan "Img 1" di halaman Absensi bisa dibuka. */

@@ -37,9 +37,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title }} - PT. Tinta Inspirasi Indonesia</title>
-    @stack('styles')
     <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=poppins:400,500,600,700" rel="stylesheet">
+    <link href="https://fonts.bunny.net/css?family=poppins:400,500,600" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-[#f5f6fb] font-sans text-gray-900 antialiased"
@@ -91,7 +90,7 @@
 
     {{-- ================= KONTEN ================= --}}
     <div class="transition-[padding] duration-200 lg:pl-[230px]" :class="{ 'lg:pl-0!': !open }">
-        <header class="flex items-start justify-between gap-4 px-4 pt-4 sm:px-6 lg:px-8">
+        <header class="mx-auto flex w-full max-w-[1600px] items-start justify-between gap-4 px-4 pt-4 sm:px-6 lg:px-8">
             <div class="flex min-w-0 items-start gap-4">
                 <button type="button" @click="open = !open"
                         :aria-expanded="open.toString()" aria-controls="sidebar" aria-label="Tampilkan atau sembunyikan menu"
@@ -102,6 +101,9 @@
             </div>
 
             <div class="flex shrink-0 items-center gap-3">
+                {{-- Slot opsional untuk kontrol khusus halaman (mis. rentang tanggal) --}}
+                {{ $actions ?? '' }}
+
                 @if ($hasRoute('notifications.index'))
                     <a href="{{ route('notifications.index') }}" aria-label="Notifikasi"
                        class="flex size-10 items-center justify-center rounded-full border border-blue-400 bg-white text-gray-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-blue-500">
@@ -141,6 +143,5 @@
             {{ $slot }}
         </main>
     </div>
-    @stack('scripts')
 </body>
 </html>

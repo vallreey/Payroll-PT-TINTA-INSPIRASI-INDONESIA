@@ -1,13 +1,14 @@
 <?php
 
-use App\Http\Controllers\AttendanceController;
-use App\Http\Controllers\AttendanceRecordController;
+use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredEmployeeController;
+use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\AttendanceRecordController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
-use App\Http\Controllers\LocationTrackingController;
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\UserController;
+use App\Http\Middleware\EnsureAccountIsActive;
 
 Route::get('/', function () {
     return redirect()->route('login');
@@ -34,7 +35,7 @@ Route::middleware('guest')->group(function () {
 });
 
 // ---------- Authenticated routes (sudah login & approved) ----------
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', EnsureAccountIsActive::class])->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
     // Dashboard — tampilan menyesuaikan role (lihat DashboardController)
@@ -68,27 +69,16 @@ Route::middleware('auth')->group(function () {
     Route::patch('/employees/{employee}/status', [EmployeeController::class, 'updateStatus'])->name('employees.status');
     Route::get('/employees/{employee}/ktp', [EmployeeController::class, 'ktp'])->name('employees.ktp');
 
-    // ---------- Tracking lokasi ----------
-    Route::get('/tracking-lokasi', [LocationTrackingController::class, 'index'])->name('tracking.index');
-    Route::get('/tracking-lokasi/data', [LocationTrackingController::class, 'data'])->name('tracking.data');
-    Route::get('/tracking-lokasi/karyawan/{employee}/history', [LocationTrackingController::class, 'history'])
-        ->whereNumber('employee')->name('tracking.history');
-    Route::post('/tracking-lokasi/position', [LocationTrackingController::class, 'storePosition'])
-        ->middleware('throttle:12,1')->name('tracking.position');
-    Route::post('/tracking-lokasi/assignment', [LocationTrackingController::class, 'assign'])->name('tracking.assignment');
-    Route::put('/tracking-lokasi/assignment/{assignment}', [LocationTrackingController::class, 'updateAssignment'])
-        ->whereNumber('assignment')->name('tracking.assignment.update');
-    Route::delete('/tracking-lokasi/assignment/{assignment}', [LocationTrackingController::class, 'deleteAssignment'])
-        ->whereNumber('assignment')->name('tracking.assignment.delete');
-    Route::post('/tracking-lokasi/places', [LocationTrackingController::class, 'storePlace'])->name('tracking.places.store');
-    Route::get('/tracking-lokasi/search', [LocationTrackingController::class, 'search'])
-        ->middleware('throttle:60,1')->name('tracking.search');
-    Route::get('/tracking-lokasi/reverse', [LocationTrackingController::class, 'reverse'])
-        ->middleware('throttle:10,1')->name('tracking.reverse');
-    Route::get('/tracking-lokasi/route', [LocationTrackingController::class, 'route'])
-        ->middleware('throttle:10,1')->name('tracking.route');
-    Route::post('/tracking-lokasi/simulation/{employee}', [LocationTrackingController::class, 'simulate'])
-        ->whereNumber('employee')->middleware('throttle:30,1')->name('tracking.simulate');
-    Route::delete('/tracking-lokasi/simulation', [LocationTrackingController::class, 'resetSimulation'])
-        ->name('tracking.simulation.reset');
+    // ---------- Manajemen Pengguna (khusus Super Admin; hak akses: UserPolicy) ----------
+    Route::get('/users', [UserController::class, 'index'])->name('users.index');
+    Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
+    Route::post('/users', [UserController::class, 'store'])->name('users.store');
+    Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
+    Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::put('/users/{user}/password', [UserController::class, 'password'])->name('users.password');
+    Route::patch('/users/{user}/status', [UserController::class, 'status'])->name('users.status');
+    Route::patch('/users/{user}/setujui', [UserController::class, 'approve'])->name('users.approve');
+    Route::patch('/users/{user}/tolak', [UserController::class, 'reject'])->name('users.reject');
 });
+
+

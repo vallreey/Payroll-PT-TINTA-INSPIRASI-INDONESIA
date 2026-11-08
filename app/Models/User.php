@@ -11,6 +11,15 @@ class User extends Authenticatable
 {
     use HasFactory;
 
+    // Peran akun (nilai database => label di tampilan)
+    public const ROLES = [
+        'super_admin' => 'Super Admin',
+        'hrd' => 'HRD',
+        'supervisor' => 'Supervisor',
+        'direktur' => 'CEO/Direktur',
+        'karyawan' => 'Karyawan',
+    ];
+
     protected $table = 'tbl_pengguna';
 
     protected $primaryKey = 'id_pengguna';
@@ -37,6 +46,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'approved_at' => 'datetime',
+            'terakhir_aktif' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -64,6 +74,35 @@ class User extends Authenticatable
     protected function namaTampil(): Attribute
     {
         return Attribute::get(fn () => $this->employee?->nama_lengkap ?? $this->username ?? $this->email);
+    }
+
+    // Status gabungan untuk tampilan: menunggu | ditolak | aktif | nonaktif
+    protected function displayStatus(): Attribute
+    {
+        return Attribute::get(fn () => match (true) {
+            $this->status_persetujuan === 'pending' => 'menunggu',
+            $this->status_persetujuan === 'rejected' => 'ditolak',
+            default => $this->status,
+        });
+    }
+
+    // "Hari ini, 09.15" / "Kemarin, 09.15" / "22 Jun 2026, 09.15" / "Belum pernah"
+    protected function terakhirAktifLabel(): Attribute
+    {
+        return Attribute::get(function () {
+            $at = $this->terakhir_aktif;
+            if (! $at) {
+                return 'Belum pernah';
+            }
+
+            $time = $at->format('H.i');
+
+            return match (true) {
+                $at->isToday() => 'Hari ini, '.$time,
+                $at->isYesterday() => 'Kemarin, '.$time,
+                default => $at->locale('id')->translatedFormat('j M Y').', '.$time,
+            };
+        });
     }
 
     // ================= Helper Role =================

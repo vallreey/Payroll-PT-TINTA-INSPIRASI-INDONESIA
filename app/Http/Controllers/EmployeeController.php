@@ -169,6 +169,12 @@ class EmployeeController extends Controller
         ];
     }
 
+    // Pendaftar yang belum/tidak disetujui belum dianggap karyawan (konsisten dengan dashboard dan absensi)
+    private function approved(Builder $query): Builder
+    {
+        return $query->whereHas('user', fn (Builder $q) => $q->where('status_persetujuan', 'approved'));
+    }
+
     // Membersihkan input filter: nilai tidak valid diabaikan, bukan menimbulkan error
     private function filters(Request $request): array
     {
@@ -194,8 +200,7 @@ class EmployeeController extends Controller
     // Query daftar: hanya karyawan yang boleh dilihat pengguna; bawaan hanya yang aktif
     private function query(User $user, array $filters): Builder
     {
-        $query = Employee::query()
-            ->visibleTo($user)
+        $query = $this->approved(Employee::query()->visibleTo($user))
             ->with(['user:id_pengguna,email,foto_profil', 'department:id_departemen,nama_departemen']);
 
         if ($filters['status'] === 'nonaktif') {
@@ -227,7 +232,7 @@ class EmployeeController extends Controller
     // Ringkasan kartu atas: jumlah per jenis kepegawaian dan per gender (hanya karyawan aktif)
     private function summary(User $user): array
     {
-        $active = Employee::query()->visibleTo($user)->where('tbl_karyawan.status', 'aktif');
+        $active = $this->approved(Employee::query()->visibleTo($user))->where('tbl_karyawan.status', 'aktif');
 
         $byStatus = (clone $active)->selectRaw('status_kepegawaian, count(*) as total')->groupBy('status_kepegawaian')->pluck('total', 'status_kepegawaian');
         $byGender = (clone $active)->selectRaw('jenis_kelamin, count(*) as total')->groupBy('jenis_kelamin')->pluck('total', 'jenis_kelamin');

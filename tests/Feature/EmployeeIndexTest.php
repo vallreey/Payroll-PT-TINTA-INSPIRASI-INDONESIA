@@ -91,6 +91,18 @@ class EmployeeIndexTest extends TestCase
         $get(['status' => 'hack', 'division' => '99999', 'date' => 'bukan-tanggal'])->assertOk()->assertSee('Andi Tetap'); // nilai aneh diabaikan
     }
 
+    public function test_unapproved_registrants_are_not_listed_or_counted(): void
+    {
+        $hrd = $this->makeEmployee('hrd');
+        $this->makeEmployee('karyawan', ['nama_lengkap' => 'Sudah Disetujui']);
+        $this->makeEmployee('karyawan', ['nama_lengkap' => 'Calon Menunggu'], ['status_persetujuan' => 'pending']);
+        $this->makeEmployee('karyawan', ['nama_lengkap' => 'Calon Ditolak'], ['status_persetujuan' => 'rejected']);
+
+        $this->actingAs($hrd->user)->get(route('employees.index'))
+            ->assertSee('Sudah Disetujui')->assertDontSee('Calon Menunggu')->assertDontSee('Calon Ditolak')
+            ->assertViewHas('summary', fn ($s) => $s['total'] === 2);
+    }
+
     public function test_pagination_and_add_button_visibility(): void
     {
         $hrd = $this->makeEmployee('hrd', ['nama_lengkap' => 'AAA Hrd']);
